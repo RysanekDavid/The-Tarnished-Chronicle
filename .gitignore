@@ -167,3 +167,6 @@ data/
 # Source for external libraries/tools
 er_save_lib_source/
 flag_extractor_cli/
+# Project planning documents
+PROJECT_KICKOFF.cs.md
+PROJECT_KICKOFF.en.md
