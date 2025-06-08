@@ -12,11 +12,21 @@ class OverlayWindow(QWidget):
         self.text_color = text_color
         self.font_size = font_size
 
-        self.layout = QVBoxLayout(self)
-        self.label = QLabel("Simple Overlay Active", self)
+        # Main layout for the OverlayWindow itself, to hold the content_widget
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(self.main_layout)
+
+        # Create the content widget that will have the background and actual content
+        self.content_widget = QWidget(self)
+        self.main_layout.addWidget(self.content_widget)
+
+        # Layout for the content_widget
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.label = QLabel("Simple Overlay Active", self.content_widget)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(self.label)
-        self.layout.setContentsMargins(0,0,0,0) # Remove margins if any for better dragging feel
+        self.content_layout.addWidget(self.label)
+        self.content_layout.setContentsMargins(5, 5, 5, 5) # Padding inside the background
 
         self._apply_styles()
 
@@ -24,10 +34,13 @@ class OverlayWindow(QWidget):
         self._drag_pos = QPoint(0,0) # For dragging
 
     def _apply_styles(self):
-        # Apply background color to the QWidget itself
-        # Important: For WA_TranslucentBackground to work with a custom background color,
-        # the color must have an alpha channel. Otherwise, the window might not be translucent.
-        self.setStyleSheet(f"QWidget {{ background-color: {self.background_color}; border-radius: 5px; }}")
+        # Make the OverlayWindow itself transparent
+        super().setStyleSheet("QWidget { background-color: transparent; border: none; }") # Use super to avoid recursion if self.setStyleSheet is overridden
+
+        # Apply background color and border-radius to the content_widget
+        # Important: For WA_TranslucentBackground on parent to work with a custom background color on child,
+        # the color must have an alpha channel for semi-transparency. Otherwise, it will be solid.
+        self.content_widget.setStyleSheet(f"QWidget {{ background-color: {self.background_color}; border-radius: 5px; }}")
 
         # Apply text color and font size to the QLabel
         self.label.setStyleSheet(f"QLabel {{ color: {self.text_color}; font-size: {self.font_size}; background-color: transparent; }}")
