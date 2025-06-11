@@ -115,7 +115,9 @@ QHeaderView::section {
     background-color: #3B4252;
     color: #D8DEE9;
     padding: 5px;
+    /* UPRAVENO: Přidáme spodní linku, která opticky oddělí hlavičku od prvního řádku. */
     border: none;
+    border-bottom: 1px solid #434C5E; /* PŘIDANÁ LINKA */
     font-weight: bold;
 }
 
@@ -258,7 +260,78 @@ QLabel#gamePhaseHeader[phase="mid"] {
     color: rgb(183, 178, 87); /* Žlutá */
 }
 QLabel#gamePhaseHeader[phase="late"] {
-    color: rgb(110, 23, 23); /* Červená */
+    color: rgb(110, 23, 23); /* Red */
+}
+/* --- ADDED RULE --- */
+QLabel#gamePhaseHeader[phase="dlc"] {
+    color: rgb(136, 99, 187); /* A nice purple for DLC */
+}
+/* --- END ADDED RULE --- */
+/* === NOVÝ STYL PRO VERZI V PATIČCE === */
+#footer QLabel#versionLabel {
+    color: #616E88; /* Tlumená, méně výrazná barva */
+    font-weight: bold;
+}
+
+/* === STYL PRO INFORMAČNÍ TLAČÍTKA === */
+QPushButton#infoButton {
+    background-color: #434C5E; /* Tmavší, decentní pozadí */
+    color: #D8DEE9;            /* Světlý text */
+    border: 1px solid #4C566A; /* Jemný okraj */
+    padding: 5px 12px;         /* Menší padding než hlavní tlačítka */
+    font-weight: normal;       /* Normální tloušťka písma */
+    text-align: left;          /* Zarovná ikonu a text doleva uvnitř tlačítka */
+    max-width: 220px;          /* Omezí šířku, aby se neroztahovalo */
+    border-radius: 5px;
+}
+QPushButton#infoButton:hover {
+    background-color: #5E81AC; /* Zvýraznění při najetí myší */
+    color: #ECEFF4;
+    border-color: #6a8ab1;
+}
+
+/* === STYL PRO ODDĚLOVACÍ LINKU === */
+QFrame#separatorLine {
+    border: 1px solid #434C5E;
+}
+
+/* Styl pro GroupBoxy v panelech nastavení */
+QGroupBox {
+    font-weight: bold;
+    color: #ECEFF4;
+    border: 1px solid #434C5E;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px 5px 5px;
+    background-color: #2E3440; /* Barva pozadí panelu */
+}
+/* === STYLY PRO PATIČKU (OBNOVENO) === */
+QFrame#footer {
+    background-color: #2E3440;
+    border-top: 1px solid #4C566A;
+}
+#footer QLabel {
+    background-color: transparent;
+    font-size: 9pt;
+    color: #D8DEE9;
+}
+QLabel#monitoringStatus {
+    font-weight: bold;
+}
+QLabel#monitoringStatus[active="false"] {
+    color: #EBCB8B; /* Žlutá pro neaktivní */
+}
+QLabel#monitoringStatus[active="true"] {
+    color: #A3BE8C; /* Zelená pro aktivní */
+}
+#footer QLabel#versionLabel {
+    color: #616E88;
+    font-weight: bold;
 }
 """
 

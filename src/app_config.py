@@ -1,5 +1,8 @@
 # src/app_config.py
 
+# Verze aplikace
+APP_VERSION = "1.0.0"
+
 # Default overlay styles
 DEFAULT_OVERLAY_BG_COLOR_STR = "rgba(100, 100, 100, 220)"
 DEFAULT_OVERLAY_TEXT_COLOR_STR = "lightblue"
@@ -11,9 +14,9 @@ DEFAULT_MONITORING_INTERVAL_SEC = 5
 # Rust CLI settings
 RUST_CLI_TOOL_PATH_PLACEHOLDER = "RUST_CLI_TOOL_PATH_PLACEHOLDER"
 DEFAULT_BOSS_REFERENCE_FILENAME = "boss_ids_reference.json"
+DLC_BOSS_REFERENCE_FILENAME = "boss_ids_reference_DLC.json" 
 
-# Definuje vlastní pořadí lokací podle postupu hrou.
-# Názvy v tomto seznamu se nyní přesně shodují s klíči z vašich dat.
+
 # Lokace, které v tomto seznamu nebudou, se automaticky zařadí na konec.
 LOCATION_PROGRESSION_ORDER = [
     # Early Game (cca Level 1-40)
@@ -47,18 +50,23 @@ LOCATION_PROGRESSION_ORDER = [
     "Leyndell, Ashen Capital",
     "Elden Throne",
 ]
-# UPRAVENÁ ČÁST: Nyní slovník obsahuje text i název "property" pro QSS
 GAME_PHASE_HEADINGS = {
     "Limgrave": {
-        "text": "Early Game: (Level 1 - 40)",
+        "text": "Early Game: (Levels 1-40)",
         "property": "early"
     },
     "Liurnia of the Lakes": {
-        "text": "Mid Game: (Level 40 - 100)",
+        "text": "Mid Game: (Levels 40-90)",
         "property": "mid"
     },
     "Forbidden Lands": {
-        "text": "Late Game: (Level 100 - 150+)",
+        "text": "Late Game: (Levels 100+)",
         "property": "late"
+    },
+    # --- ADDED SECTION ---
+    "dlc_header": {
+        "text": "DLC: Shadow of the Erdtree",
+        "property": "dlc"
     }
+    # --- END ADDED SECTION ---
 }
