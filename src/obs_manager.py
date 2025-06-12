@@ -172,7 +172,7 @@ class ObsManager:
 
         # Formátování času
         s = stats.get('time', -1)
-        time_str = f"{s//3600:02d}:{(s%3600)//60:02d}:{s%60:02d}" if s >= 0 else "N/A"
+        time_str = f"{s//3600:02d}:{(s%3600)//60:02d}:{s%60:02d}" if s >= 0 else "--:--"
         
         # Zápis do bosses.txt
         if self.bosses_enabled.isChecked():

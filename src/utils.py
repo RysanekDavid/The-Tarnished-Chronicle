@@ -22,3 +22,11 @@ def create_colored_pixmap(icon_path: str, color: QColor, size: QSize) -> QPixmap
     except Exception as e:
         print(f"Error creating colored pixmap for {icon_path}: {e}")
         return QPixmap()
+def format_seconds_to_hms(seconds: int) -> str:
+    """Formats a duration in seconds to a HH:MM:SS string."""
+    if not isinstance(seconds, (int, float)) or seconds < 0:
+        return "--:--"
+    
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"

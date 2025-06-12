@@ -27,6 +27,7 @@ from .rust_cli_handler import RustCliHandler
 from .boss_data_manager import BossDataManager
 from .save_monitor_logic import SaveMonitorLogic
 from .obs_manager import ObsManager
+from .timestamp_manager import TimestampManager # <--- NEW IMPORT
 
 class BossChecklistApp(QWidget):
     def __init__(self):
@@ -45,6 +46,19 @@ class BossChecklistApp(QWidget):
         self.save_monitor_logic = SaveMonitorLogic(self.rust_cli_handler, self.boss_data_manager, self)
         self.last_known_stats = {}
         self.location_widgets = {}
+        self.timestamp_manager = TimestampManager() # <--- NEW INSTANCE
+
+        # --- NEW TIMER ATTRIBUTES ---
+        # This timer will tick every second to update the UI smoothly
+        self.ui_timer = QTimer(self)
+        self.ui_timer.setInterval(1000) # 1 second interval
+
+        # These will store the last known play time from the save file
+        # and the real-world time we received it.
+        self.last_play_time_snapshot = -1
+        self.last_snapshot_real_time = -1
+        self.is_game_running = False # <--- NEW STATE VARIABLE
+        # --- END NEW TIMER ATTRIBUTES ---
 
         self.init_ui()
         
@@ -169,6 +183,14 @@ class BossChecklistApp(QWidget):
         self.overlay_settings_button.clicked.connect(self.overlay_manager.toggle_settings_panel)
         self.obs_settings_button.clicked.connect(self.obs_manager.toggle_panel_visibility)
 
+        # --- NEW SIGNAL CONNECTION ---
+        self.ui_timer.timeout.connect(self.update_live_timer)
+        # --- END NEW ---
+
+        # Connect to the new signal from the monitor
+        self.save_monitor_logic.boss_defeated.connect(self.on_boss_defeated)
+        self.save_monitor_logic.game_process_status.connect(self.on_game_process_status_changed) # <--- NEW CONNECTION
+
     def load_and_apply_filters(self):
         """Loads filter settings from QSettings and applies them to the UI controls."""
         # Content Filter
@@ -219,6 +241,57 @@ class BossChecklistApp(QWidget):
         for section_widget in self.location_widgets.values():
             section_widget.apply_status_filter(is_checked)
         
+    def on_game_process_status_changed(self, is_running: bool):
+        """Starts or stops the smooth UI timer based on game process status."""
+        self.is_game_running = is_running
+        if is_running:
+            print("Game process detected. Starting UI timer.")
+            # When resuming, reset the real-time marker to now
+            self.last_snapshot_real_time = time.time()
+            self.ui_timer.start()
+        else:
+            print("Game process stopped. Stopping UI timer.")
+            # When pausing, update the snapshot with the time that just elapsed
+            if self.last_play_time_snapshot > 0 and self.last_snapshot_real_time > 0:
+                elapsed = time.time() - self.last_snapshot_real_time
+                self.last_play_time_snapshot += elapsed
+            self.ui_timer.stop()
+            
+    def stop_ui_timer(self):
+        """Stops the UI timer and resets time snapshots."""
+        if self.ui_timer.isActive():
+            self.ui_timer.stop()
+        self.last_play_time_snapshot = -1
+        self.last_snapshot_real_time = -1
+        self.is_game_running = False # <--- ADD THIS
+        self.footer.update_time(-1)
+        self.overlay_manager.update_text(self._get_current_stats_payload())
+
+    def update_live_timer(self):
+        """
+        This slot is called every second to create a smooth ticking timer.
+        """
+        if self.last_play_time_snapshot < 0:
+            return
+
+        # Calculate the real-world seconds passed since our last data snapshot
+        real_time_elapsed = time.time() - self.last_snapshot_real_time
+        
+        # Calculate the new, live play time
+        live_play_time = self.last_play_time_snapshot + real_time_elapsed
+        
+        # Update the UI components
+        self.footer.update_time(int(live_play_time))
+        
+        # Update overlay if it's visible
+        if self.overlay_manager.overlay_window.isVisible():
+            stats = self.last_known_stats.get("stats", {}).copy()
+            stats['seconds_played'] = int(live_play_time)
+            # Create a temporary payload for the overlay to prevent modifying the main one
+            temp_payload = self.last_known_stats.copy()
+            temp_payload['stats'] = stats
+            self.overlay_manager.update_text(temp_payload)
+
     def _handle_monitoring_started(self, char_name, interval):
         self.footer.update_monitoring_status(True, text=f"Monitoring: {char_name}")
 
@@ -226,6 +299,9 @@ class BossChecklistApp(QWidget):
         self.footer.update_monitoring_status(False)
 
     def handle_stats_update(self, data: dict):
+        """
+        OPRAVENÁ VERZE: Zpracuje nová data, sjednotí je a aktualizuje celé UI najednou.
+        """
         stats_from_rust = data.get("stats", {})
         boss_statuses = data.get("boss_statuses", {})
 
@@ -235,12 +311,22 @@ class BossChecklistApp(QWidget):
         final_stats_payload = stats_from_rust.copy()
         final_stats_payload['defeated'] = defeated_count
         final_stats_payload['total'] = total_count
+
+        # --- TIMER LOGIC MODIFICATION ---
+        # When we get fresh data, update our snapshots
+        self.last_play_time_snapshot = final_stats_payload.get('seconds_played', -1)
+        self.last_snapshot_real_time = time.time()
+        # Start the timer ONLY if the game is already running
+        if self.is_game_running and not self.ui_timer.isActive():
+            self.ui_timer.start()
+        # --- END TIMER LOGIC ---
         
         self.last_known_stats = {
             "stats": final_stats_payload,
             "boss_statuses": boss_statuses
         }
-
+        
+        # This will now update the timer to the snapshot value instantly
         self.footer.update_stats(final_stats_payload)
         self.overlay_manager.update_text(self.last_known_stats)
         self.obs_manager.update_obs_files(final_stats_payload)
@@ -252,6 +338,7 @@ class BossChecklistApp(QWidget):
         selected_data = self.character_slot_combobox.itemData(index)
         
         if index == 0 or selected_data is None:
+            self.stop_ui_timer() # <--- ADD THIS CALL
             self.footer.update_monitoring_status(False)
             self.footer.update_stats({})
             self.update_main_boss_area(clear=True)
@@ -278,12 +365,37 @@ class BossChecklistApp(QWidget):
             selected_data["character_name"]
         )
 
+    def on_boss_defeated(self, boss_event_id: str, play_time: int):
+        """Slot to handle a newly defeated boss."""
+        # We need to find which boss corresponds to this event ID
+        all_boss_data = self.boss_data_manager.get_boss_data_by_location()
+        # --- FIX IS HERE ---
+        # The key is 'character_name', not 'character_id'
+        character_name = self.character_slot_combobox.currentData().get("character_name")
+
+        if not character_name:
+            return
+
+        for location, bosses in all_boss_data.items():
+            for boss_info in bosses:
+                event_ids = boss_info.get("event_id", [])
+                if not isinstance(event_ids, list):
+                    event_ids = [event_ids]
+                
+                if str(boss_event_id) in [str(eid) for eid in event_ids]:
+                    boss_name = boss_info.get("name")
+                    # Use the correct character identifier
+                    self.timestamp_manager.add_timestamp(character_name, boss_name, play_time)
+                    return # Exit once found
+
     def update_main_boss_area(self, clear: bool = False):
-        """
-        REFACTORED: Clears and completely rebuilds the boss list UI.
-        This fixes the header duplication and correctly separates DLC content.
-        """
-        # ... (The robust clearing logic at the top remains the same) ...
+        # --- PRESERVE EXPANDED STATE ---
+        expanded_states = {
+            name: widget.is_expanded
+            for name, widget in self.location_widgets.items()
+        }
+        
+        # ... (The robust clearing logic remains the same) ...
         layout = self.main_boss_area_widget.widget().layout()
         while layout.count() > 1:
             item = layout.takeAt(0)
@@ -291,12 +403,13 @@ class BossChecklistApp(QWidget):
             if widget:
                 widget.deleteLater()
         self.location_widgets.clear()
-        
+        # ...
+
         if clear:
             self.footer.update_stats({})
             return
-
-        # ... (The logic for getting boss_data and separating into base_game/dlc_items remains the same) ...
+        
+        # ... (The logic for getting and sorting boss data remains the same) ...
         boss_data = self.boss_data_manager.get_boss_data_by_location()
         if not boss_data: return
         dlc_location_names = self.boss_data_manager.get_dlc_location_names()
@@ -313,10 +426,23 @@ class BossChecklistApp(QWidget):
         sorted_base_game_items = sorted(base_game_items, key=lambda item: (order_map.get(item[0], float('inf')), item[0]))
         sorted_dlc_items = sorted(dlc_items, key=lambda item: item[0])
 
-        # --- UI Building Phase ---
+        # --- FIX IS HERE ---
+        # When retrieving timestamps, we must use the SAME key we used for saving: 'character_name'
+        character_name = self.character_slot_combobox.currentData().get("character_name") if self.character_slot_combobox.currentIndex() > 0 else None
+        char_timestamps = self.timestamp_manager.get_timestamps_for_character(character_name) if character_name else {}
+        # --- END FIX ---
+        
+        def enrich_boss_list(bosses_list):
+            for boss in bosses_list:
+                boss['timestamp'] = char_timestamps.get(boss.get('name'))
+            return bosses_list
 
-        # 1. Add all base game widgets (This part is unchanged)
+        # --- UI Building Phase ---
+        # (This entire section is almost the same, we just add one line)
+        
+        # 1. Add all base game widgets
         for location_name, bosses_list in sorted_base_game_items:
+            # ... (header logic is unchanged)
             if location_name in GAME_PHASE_HEADINGS:
                 header_data = GAME_PHASE_HEADINGS[location_name]
                 header_label = QLabel(header_data["text"])
@@ -324,30 +450,31 @@ class BossChecklistApp(QWidget):
                 header_label.setAlignment(Qt.AlignCenter)
                 header_label.setProperty("phase", header_data["property"])
                 layout.insertWidget(layout.count() - 1, header_label)
-
-            section = LocationSectionWidget(location_name, bosses_list, self.main_boss_area_widget.widget())
+            section = LocationSectionWidget(location_name, enrich_boss_list(bosses_list), self.main_boss_area_widget.widget())
             layout.insertWidget(layout.count() - 1, section)
             self.location_widgets[location_name] = section
+            # --- RESTORE STATE ---
+            if expanded_states.get(location_name):
+                section.set_expanded(True)
 
-        # --- FIX IS HERE ---
-        # 2. Add the DLC section. Check the combobox directly for user's intent.
+        # 2. Add the DLC section
         current_filter_mode = self.content_filter_combobox.currentData()
         if current_filter_mode in ["all", "dlc"] and sorted_dlc_items:
-            # Add the main DLC header
+            # ... (dlc header logic)
             dlc_header_data = GAME_PHASE_HEADINGS['dlc_header']
             dlc_header_label = QLabel(dlc_header_data["text"])
             dlc_header_label.setObjectName("gamePhaseHeader")
             dlc_header_label.setAlignment(Qt.AlignCenter)
             dlc_header_label.setProperty("phase", dlc_header_data["property"])
             layout.insertWidget(layout.count() - 1, dlc_header_label)
-
-            # Add all DLC location card widgets
             for location_name, bosses_list in sorted_dlc_items:
-                section = LocationSectionWidget(location_name, bosses_list, self.main_boss_area_widget.widget())
+                section = LocationSectionWidget(location_name, enrich_boss_list(bosses_list), self.main_boss_area_widget.widget())
                 layout.insertWidget(layout.count() - 1, section)
                 self.location_widgets[location_name] = section
-        
-        # After building the new UI, immediately apply the visual status filter.
+                # --- RESTORE STATE ---
+                if expanded_states.get(location_name):
+                    section.set_expanded(True)
+
         self.handle_status_filter_change()
         
     def on_save_file_path_changed(self, new_path):

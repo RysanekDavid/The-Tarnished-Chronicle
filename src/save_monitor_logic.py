@@ -1,6 +1,8 @@
 # src/save_monitor_logic.py
 import os
 import time
+import json
+import psutil # <--- NEW IMPORT
 from PySide6.QtCore import QObject, Signal, QTimer
 from .rust_cli_handler import RustCliHandler
 from .boss_data_manager import BossDataManager
@@ -10,6 +12,8 @@ class SaveMonitorLogic(QObject):
     monitoring_started = Signal(str, int)
     monitoring_stopped = Signal()
     stats_updated = Signal(dict)
+    boss_defeated = Signal(str, int)
+    game_process_status = Signal(bool) # <--- NEW SIGNAL (is_running)
     
     def __init__(self, rust_cli_handler: RustCliHandler, boss_data_manager: BossDataManager, parent=None):
         super().__init__(parent)
@@ -23,6 +27,14 @@ class SaveMonitorLogic(QObject):
         self.current_save_file_path = ""
         self.current_slot_index = -1
         self.last_known_data = None
+        self.game_process_is_running = False # <--- NEW STATE VARIABLE
+
+    def _is_game_running(self):
+        """Checks if eldenring.exe is a running process."""
+        for proc in psutil.process_iter(['name']):
+            if proc.info['name'].lower() == "eldenring.exe":
+                return True
+        return False
 
     def start_monitoring(self, save_file_path: str, slot_index: int, character_name: str):
         self.stop_monitoring()
@@ -42,7 +54,18 @@ class SaveMonitorLogic(QObject):
             self.monitoring_stopped.emit()
 
     def on_monitoring_timeout(self):
-        """Načte kompletní data ze souboru jedním voláním a porovná je."""
+        """Loads full data from the file and compares it."""
+        # --- NEW PROCESS CHECK ---
+        is_running = self._is_game_running()
+        if is_running != self.game_process_is_running:
+            self.game_process_is_running = is_running
+            self.game_process_status.emit(is_running)
+        
+        # If the game isn't running, we don't need to read the save file
+        if not is_running:
+            return
+        # --- END NEW PROCESS CHECK ---
+
         if self.current_slot_index == -1:
             return
 
@@ -60,6 +83,25 @@ class SaveMonitorLogic(QObject):
             print(f"Monitoring Error: {err or 'No data returned'}")
             return
 
-        if new_data != self.last_known_data:
+        # Check for newly defeated bosses before emitting the general update
+        if self.last_known_data:
+            old_statuses = self.last_known_data.get("boss_statuses", {})
+            new_statuses = new_data.get("boss_statuses", {})
+            current_play_time = new_data.get("stats", {}).get("seconds_played", 0)
+
+            for boss_id, is_defeated in new_statuses.items():
+                # If the boss is now defeated but wasn't before
+                if is_defeated and not old_statuses.get(boss_id, False):
+                    # We need to find the boss name from its ID.
+                    # This is a bit tricky here. We will emit the ID and let the GUI find the name.
+                    self.boss_defeated.emit(boss_id, current_play_time)
+
+        # --- ROBUST COMPARISON FIX ---
+        # Convert dictionaries to sorted JSON strings for a reliable, order-independent comparison.
+        new_data_str = json.dumps(new_data, sort_keys=True)
+        last_data_str = json.dumps(self.last_known_data, sort_keys=True) if self.last_known_data else ""
+
+        if new_data_str != last_data_str:
+            print("Change detected in save data. Emitting update.")
             self.last_known_data = new_data
             self.stats_updated.emit(new_data)

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from .app_config import APP_VERSION
 # --- ZDE JE KLÍČOVÁ OPRAVA ---
-from .utils import create_colored_pixmap
+from .utils import create_colored_pixmap, format_seconds_to_hms # <--- NEW IMPORT
 
 #==============================================================================
 # Custom widget for the toggle switch
@@ -328,6 +328,7 @@ class LocationSectionWidget(QFrame):
     def _populate_boss_table(self):
         self.boss_table.setRowCount(len(self.bosses_data))
         for row, boss_info in enumerate(self.bosses_data):
+            # ... (boss name and status icon logic is unchanged) ...
             boss_name_item = QTableWidgetItem(f" {boss_info.get('name', 'N/A')}")
             boss_name_item.setData(Qt.ItemDataRole.UserRole, boss_info)
             self.boss_table.setItem(row, 0, boss_name_item)
@@ -336,7 +337,12 @@ class LocationSectionWidget(QFrame):
             status_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.boss_table.setCellWidget(row, 1, status_icon_label)
             
-            timestamp_item = QTableWidgetItem("N/A")
+            # --- MODIFIED: Handle timestamp display ---
+            timestamp_seconds = boss_info.get('timestamp')
+            timestamp_str = format_seconds_to_hms(timestamp_seconds)
+            timestamp_item = QTableWidgetItem(timestamp_str)
+            # --- END MODIFIED ---
+            
             timestamp_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.boss_table.setItem(row, 2, timestamp_item)
 
@@ -380,8 +386,22 @@ class LocationSectionWidget(QFrame):
         else:
             self.expand_button.setIcon(QIcon("assets/icons/chevron-right.svg"))
 
+    def _update_table_height(self):
+        """Calculates and sets the correct fixed height for the boss table."""
+        if self.is_expanded:
+            header_h = self.boss_table.horizontalHeader().height()
+            # Calculate height based only on visible rows
+            content_h = sum(self.boss_table.rowHeight(i) for i in range(self.boss_table.rowCount()) if not self.boss_table.isRowHidden(i))
+            self.boss_table.setFixedHeight(header_h + content_h + 5)
+        else:
+            self.boss_table.setFixedHeight(0)
+        
+        # This is important to force the layout to re-evaluate
+        QTimer.singleShot(0, lambda: self.parentWidget().layout().activate())
+
     def apply_status_filter(self, hide_defeated: bool):
         """Hides or shows rows in the table based on their defeated status."""
+        # ... (the existing logic for hiding/showing rows is unchanged) ...
         any_boss_visible = False
         for row in range(self.boss_table.rowCount()):
             item = self.boss_table.item(row, 0)
@@ -390,16 +410,23 @@ class LocationSectionWidget(QFrame):
             boss_info = item.data(Qt.ItemDataRole.UserRole)
             is_defeated = boss_info.get("is_defeated", False)
             
-            # The row should be hidden if the filter is on AND the boss is defeated
             should_hide = hide_defeated and is_defeated
-            
             self.boss_table.setRowHidden(row, should_hide)
             
             if not should_hide:
                 any_boss_visible = True
         
-        # Hide the entire section if all its bosses are filtered out
         self.setVisible(any_boss_visible)
+        
+        # --- ADDED CALL ---
+        # After changing row visibility, we must update the table's height
+        self._update_table_height()
+
+    def set_expanded(self, expanded: bool):
+        """Programmatically sets the expanded state of the widget."""
+        # Only call toggle if the state is actually different, to avoid recursion
+        if self.is_expanded != expanded:
+            self._toggle_expand()
 
     def _header_clicked(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -411,12 +438,11 @@ class LocationSectionWidget(QFrame):
         self.header_widget.setProperty("expanded", self.is_expanded)
         self.header_widget.style().unpolish(self.header_widget)
         self.header_widget.style().polish(self.header_widget)
-        if self.is_expanded:
-            header_h = self.boss_table.horizontalHeader().height()
-            content_h = sum(self.boss_table.rowHeight(i) for i in range(self.boss_table.rowCount()))
-            self.boss_table.setFixedHeight(header_h + content_h + 5)
-        else:
-            self.boss_table.setFixedHeight(0)
+        
+        # --- MODIFIED ---
+        # Use our new helper method here as well for consistency
+        self._update_table_height()
+        
         self._update_header_text()
         self.adjustSize()
         if self.parentWidget() and self.parentWidget().layout():
