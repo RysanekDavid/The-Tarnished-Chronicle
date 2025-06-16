@@ -163,6 +163,12 @@ def create_overlay_settings_panel_layout(parent_widget):
     parent_widget.overlay_show_seconds = QCheckBox("Show Seconds in Time")
     parent_widget.overlay_show_seconds.setStyleSheet("margin-left: 20px;")
     content_layout.addWidget(parent_widget.overlay_show_seconds)
+    
+    # --- PŘIDÁNO ---
+    parent_widget.overlay_show_last_boss = QCheckBox("Show Last Boss Killed")
+    parent_widget.overlay_show_last_boss.setToolTip("Displays the name and time of the last defeated boss.")
+    content_layout.addWidget(parent_widget.overlay_show_last_boss)
+    # --- KONEC ---
     content_groupbox.setLayout(content_layout)
     settings_layout.addWidget(content_groupbox)
 
@@ -244,6 +250,22 @@ def create_obs_panel_layout(parent_widget):
     death_layout.addWidget(parent_widget.obs_deaths_format)
     files_layout.addLayout(death_layout)
 
+    # --- Death Counter Management for OBS ---
+    death_management_groupbox = QGroupBox("OBS Death Counter Management")
+    death_management_layout = QVBoxLayout(death_management_groupbox)
+    
+    parent_widget.obs_reset_deaths_button = QPushButton("Reset OBS Deaths to 0")
+    parent_widget.obs_reset_deaths_button.setToolTip("This sets the OBS death counter to 0 by creating an offset. The real death count is not affected.")
+    death_management_layout.addWidget(parent_widget.obs_reset_deaths_button)
+    
+    parent_widget.obs_undo_reset_button = QPushButton("Undo Reset")
+    parent_widget.obs_undo_reset_button.setToolTip("Removes the death counter offset.")
+    parent_widget.obs_undo_reset_button.setEnabled(False)
+    death_management_layout.addWidget(parent_widget.obs_undo_reset_button)
+    
+    files_layout.addWidget(death_management_groupbox)
+    # --- End Death Counter Management ---
+
     time_layout = QVBoxLayout()
     parent_widget.obs_time_enabled = QCheckBox("Enable time.txt")
     parent_widget.obs_time_enabled.setChecked(True)
@@ -251,6 +273,14 @@ def create_obs_panel_layout(parent_widget):
     parent_widget.obs_time_format = QLineEdit("Time: {time}")
     time_layout.addWidget(parent_widget.obs_time_format)
     files_layout.addLayout(time_layout)
+
+    last_boss_layout = QVBoxLayout()
+    parent_widget.obs_last_boss_enabled = QCheckBox("Enable last_boss.txt")
+    parent_widget.obs_last_boss_enabled.setChecked(True)
+    last_boss_layout.addWidget(parent_widget.obs_last_boss_enabled)
+    parent_widget.obs_last_boss_format = QLineEdit("Last Kill: {boss_name} ({kill_time})")
+    last_boss_layout.addWidget(parent_widget.obs_last_boss_format)
+    files_layout.addLayout(last_boss_layout)
     
     files_groupbox.setLayout(files_layout)
     layout.addWidget(files_groupbox)

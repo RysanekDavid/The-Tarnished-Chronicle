@@ -5,11 +5,13 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QColor
 
 from .app_config import DEFAULT_OVERLAY_TEXT_COLOR_STR, DEFAULT_OVERLAY_FONT_SIZE_STR
+from .utils import format_seconds_to_hms # <-- Importujeme naši formátovací funkci
 
 class OverlayManager:
-    def __init__(self, main_app_ref, overlay_window_ref, settings_panel_ref, 
+    def __init__(self, main_app_ref, overlay_window_ref, settings_panel_ref,
                  text_color_button_ref, font_size_combobox_ref, settings_button_ref,
-                 show_bosses_ref, show_deaths_ref, show_time_ref, show_seconds_ref):
+                 show_bosses_ref, show_deaths_ref, show_time_ref, show_seconds_ref,
+                 show_last_boss_ref): # <--- NOVÝ PARAMETR
         
         self.app = main_app_ref
         self.overlay_window = overlay_window_ref
@@ -23,6 +25,7 @@ class OverlayManager:
         self.show_deaths_checkbox = show_deaths_ref
         self.show_time_checkbox = show_time_ref
         self.show_seconds_checkbox = show_seconds_ref
+        self.show_last_boss_checkbox = show_last_boss_ref # <--- NOVÁ REFERENCE
         
         self.settings = QSettings("TheTarnishedChronicle", "App")
         self.last_known_stats = {}
@@ -38,6 +41,7 @@ class OverlayManager:
         self.show_deaths_checkbox.stateChanged.connect(self.force_ui_update)
         self.show_time_checkbox.stateChanged.connect(self.force_ui_update)
         self.show_seconds_checkbox.stateChanged.connect(self.force_ui_update)
+        self.show_last_boss_checkbox.stateChanged.connect(self.force_ui_update) # <--- NOVÉ PROPOJENÍ
 
     def load_settings(self):
         """Načte uložená nastavení a aplikuje je na UI prvky."""
@@ -46,6 +50,7 @@ class OverlayManager:
         self.show_deaths_checkbox.setChecked(self.settings.value("overlay/showDeaths", False, type=bool))
         self.show_time_checkbox.setChecked(self.settings.value("overlay/showTime", False, type=bool))
         self.show_seconds_checkbox.setChecked(self.settings.value("overlay/showSeconds", True, type=bool))
+        self.show_last_boss_checkbox.setChecked(self.settings.value("overlay/showLastBoss", True, type=bool)) # <--- NOVÉ
         
         color_str = self.settings.value("overlay/textColor", DEFAULT_OVERLAY_TEXT_COLOR_STR)
         font_size = self.settings.value("overlay/fontSize", DEFAULT_OVERLAY_FONT_SIZE_STR)
@@ -63,6 +68,7 @@ class OverlayManager:
         self.settings.setValue("overlay/showDeaths", self.show_deaths_checkbox.isChecked())
         self.settings.setValue("overlay/showTime", self.show_time_checkbox.isChecked())
         self.settings.setValue("overlay/showSeconds", self.show_seconds_checkbox.isChecked())
+        self.settings.setValue("overlay/showLastBoss", self.show_last_boss_checkbox.isChecked()) # <--- NOVÉ
         self.settings.setValue("overlay/textColor", self.text_color.name(QColor.NameFormat.HexRgb))
         self.settings.setValue("overlay/fontSize", self.font_size_combobox.currentText())
 
@@ -115,11 +121,6 @@ class OverlayManager:
             # Při vypnutí okno jednoduše skryjeme.
             self.overlay_window.hide_overlay() # Použijeme metodu z OverlayWindow pro konzistenci
 
-    def toggle_settings_panel(self):
-        """Zobrazí/skryje panel nastavení."""
-        is_visible = not self.settings_panel.isVisible()
-        self.settings_panel.setVisible(is_visible)
-        self.settings_button.setText("Hide Overlay Settings" if is_visible else "Overlay Settings")
 
     def update_text(self, stats: dict):
         """
@@ -139,25 +140,20 @@ class OverlayManager:
             
     def _render_text(self):
         """Interní metoda, která sestaví a zobrazí finální text v overlayi."""
-        # Pokud nemáme žádná data (např. na začátku), nic neděláme.
         if not self.last_known_stats:
             self.overlay_window.set_text("Select a character...")
             return
 
-        stats_data = self.last_known_stats.get("stats", {})
-        
         parts = []
-        # Používáme data ze 'stats_data' a ne z kořene self.last_known_stats
-        defeated = stats_data.get('defeated', '--')
-        total = stats_data.get('total', '--')
-        deaths = stats_data.get('deaths', '--')
-        seconds = stats_data.get('seconds_played', -1)
-
+        stats = self.last_known_stats.get("stats", {})
+        
         if self.show_bosses_checkbox.isChecked():
-            parts.append(f"Bosses: {defeated}/{total}")
+            parts.append(f"Bosses: {stats.get('defeated', '--')}/{stats.get('total', '--')}")
         if self.show_deaths_checkbox.isChecked():
-            parts.append(f"Deaths: {deaths}")
+            parts.append(f"Deaths: {stats.get('deaths', '--')}")
         if self.show_time_checkbox.isChecked():
+            # ... (logika pro zobrazení času zůstává stejná)
+            seconds = stats.get('seconds_played', -1)
             if seconds >= 0:
                 h, rem = divmod(seconds, 3600)
                 m, s = divmod(rem, 60)
@@ -167,7 +163,24 @@ class OverlayManager:
                 parts.append(f"Time: {time_str}")
             else:
                 parts.append("Time: --:--:--")
+
         
-        # Pokud nic není vybráno k zobrazení, zobrazí se "Overlay Active"
-        final_text = " | ".join(parts) or "Overlay Active"
+        # Sestavíme první řádek
+        final_text = " | ".join(parts)
+        
+        # --- NOVÁ LOGIKA PRO DRUHÝ ŘÁDEK ---
+        if self.show_last_boss_checkbox.isChecked():
+            last_kill = self.last_known_stats.get("last_kill")
+            if last_kill and last_kill.get("name"):
+                boss_name = last_kill["name"]
+                kill_time_str = format_seconds_to_hms(last_kill["time"])
+                
+                # Pokud je první řádek prázdný, nepřidáváme zbytečný newline
+                if final_text:
+                    final_text += f"\n{boss_name} {kill_time_str}"
+                else:
+                    final_text = f"{boss_name} {kill_time_str}"
+
+        # Pokud je po všem text stále prázdný, zobrazíme výchozí
+        final_text = final_text or "Overlay Active"
         self.overlay_window.set_text(final_text)

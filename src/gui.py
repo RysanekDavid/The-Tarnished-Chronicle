@@ -27,7 +27,7 @@ from .rust_cli_handler import RustCliHandler
 from .boss_data_manager import BossDataManager
 from .save_monitor_logic import SaveMonitorLogic
 from .obs_manager import ObsManager
-from .timestamp_manager import TimestampManager # <--- NEW IMPORT
+from .timestamp_manager import TimestampManager
 
 class BossChecklistApp(QWidget):
     def __init__(self):
@@ -46,7 +46,8 @@ class BossChecklistApp(QWidget):
         self.save_monitor_logic = SaveMonitorLogic(self.rust_cli_handler, self.boss_data_manager, self)
         self.last_known_stats = {}
         self.location_widgets = {}
-        self.timestamp_manager = TimestampManager() # <--- NEW INSTANCE
+        self.timestamp_manager = TimestampManager()
+        self.last_killed_boss_info = None
 
         # --- NEW TIMER ATTRIBUTES ---
         # This timer will tick every second to update the UI smoothly
@@ -75,7 +76,8 @@ class BossChecklistApp(QWidget):
             show_bosses_ref=self.overlay_show_bosses,
             show_deaths_ref=self.overlay_show_deaths,
             show_time_ref=self.overlay_show_time,
-            show_seconds_ref=self.overlay_show_seconds
+            show_seconds_ref=self.overlay_show_seconds,
+            show_last_boss_ref=self.overlay_show_last_boss # <--- NOVÁ REFERENCE
         )
         self.obs_manager = ObsManager(
             main_app_ref=self,
@@ -90,7 +92,12 @@ class BossChecklistApp(QWidget):
             deaths_enabled_ref=self.obs_deaths_enabled,
             deaths_format_ref=self.obs_deaths_format,
             time_enabled_ref=self.obs_time_enabled,
-            time_format_ref=self.obs_time_format
+            time_format_ref=self.obs_time_format,
+            last_boss_enabled_ref=self.obs_last_boss_enabled,
+            last_boss_format_ref=self.obs_last_boss_format,
+            obs_reset_deaths_button_ref=self.obs_reset_deaths_button,
+            obs_undo_reset_button_ref=self.obs_undo_reset_button,
+            character_slot_combobox_ref=self.character_slot_combobox
         )
 
         self._load_initial_boss_data()
@@ -118,6 +125,7 @@ class BossChecklistApp(QWidget):
         sidebar_layout.setSpacing(10)
         self.file_slot_layout = create_file_slot_layout(self)
         sidebar_layout.addLayout(self.file_slot_layout)
+        
         sidebar_layout.addStretch()
 
         content_widget = QWidget()
@@ -171,6 +179,7 @@ class BossChecklistApp(QWidget):
         
         self.browse_button.clicked.connect(self.browse_for_save_file)
         self.character_slot_combobox.currentIndexChanged.connect(self.handle_character_selection_change)
+        self.character_slot_combobox.currentIndexChanged.connect(self.obs_manager.on_character_changed)
         
         # --- NEW/MODIFIED SIGNAL CONNECTIONS ---
         self.content_filter_combobox.currentIndexChanged.connect(self.handle_content_filter_change)
@@ -180,8 +189,9 @@ class BossChecklistApp(QWidget):
         self.search_bar.textChanged.connect(self.on_search_text_changed)
         
         self.toggle_overlay_button.toggled.connect(self.overlay_manager.on_toggle_overlay)
-        self.overlay_settings_button.clicked.connect(self.overlay_manager.toggle_settings_panel)
-        self.obs_settings_button.clicked.connect(self.obs_manager.toggle_panel_visibility)
+        self.overlay_settings_button.clicked.connect(self.toggle_overlay_settings)
+        self.obs_settings_button.clicked.connect(self.toggle_obs_settings)
+
 
         # --- NEW SIGNAL CONNECTION ---
         self.ui_timer.timeout.connect(self.update_live_timer)
@@ -321,15 +331,17 @@ class BossChecklistApp(QWidget):
             self.ui_timer.start()
         # --- END TIMER LOGIC ---
         
+        # Přidáme informaci o posledním zabití do celkového balíčku dat
         self.last_known_stats = {
             "stats": final_stats_payload,
-            "boss_statuses": boss_statuses
+            "boss_statuses": boss_statuses,
+            "last_kill": self.last_killed_boss_info # <--- PŘIDÁNO
         }
         
         # This will now update the timer to the snapshot value instantly
         self.footer.update_stats(final_stats_payload)
         self.overlay_manager.update_text(self.last_known_stats)
-        self.obs_manager.update_obs_files(final_stats_payload)
+        self.obs_manager.update_obs_files(self.last_known_stats)
         
         self.update_main_boss_area()
 
@@ -338,7 +350,8 @@ class BossChecklistApp(QWidget):
         selected_data = self.character_slot_combobox.itemData(index)
         
         if index == 0 or selected_data is None:
-            self.stop_ui_timer() # <--- ADD THIS CALL
+            self.stop_ui_timer()
+            self.last_killed_boss_info = None # <--- Resetujeme při odhlášení postavy
             self.footer.update_monitoring_status(False)
             self.footer.update_stats({})
             self.update_main_boss_area(clear=True)
@@ -357,6 +370,18 @@ class BossChecklistApp(QWidget):
             print(f"Failed to get initial status: {err}")
             return
             
+        # --- PŘIDÁNO: Zjištění posledního zabitého bosse pro načtenou postavu ---
+        char_name = selected_data.get("character_name")
+        all_timestamps = self.timestamp_manager.get_timestamps_for_character(char_name)
+        if all_timestamps:
+            # Najdeme bosse s nejvyšší (poslední) časovou značkou
+            last_boss_name = max(all_timestamps, key=all_timestamps.get)
+            last_boss_time = all_timestamps[last_boss_name]
+            self.last_killed_boss_info = {"name": last_boss_name, "time": last_boss_time}
+        else:
+            self.last_killed_boss_info = None
+        # --- KONEC PŘIDANÉ ČÁSTI ---
+            
         self.handle_stats_update(initial_data)
         
         self.save_monitor_logic.start_monitoring(
@@ -364,6 +389,11 @@ class BossChecklistApp(QWidget):
             slot_index,
             selected_data["character_name"]
         )
+
+    def force_stats_update_for_obs(self):
+       """Forces a manual recalculation and pushes the latest data to OBS files."""
+       if self.last_known_stats:
+           self.obs_manager.update_obs_files(self.last_known_stats)
 
     def on_boss_defeated(self, boss_event_id: str, play_time: int):
         """Slot to handle a newly defeated boss."""
@@ -384,8 +414,13 @@ class BossChecklistApp(QWidget):
                 
                 if str(boss_event_id) in [str(eid) for eid in event_ids]:
                     boss_name = boss_info.get("name")
-                    # Use the correct character identifier
                     self.timestamp_manager.add_timestamp(character_name, boss_name, play_time)
+                    
+                    # --- PŘIDÁNO: Aktualizujeme informaci o posledním zabití ---
+                    self.last_killed_boss_info = {"name": boss_name, "time": play_time}
+                    print(f"New last killed boss: {self.last_killed_boss_info}")
+                    # --- KONEC PŘIDANÉ ČÁSTI ---
+                    
                     return # Exit once found
 
     def update_main_boss_area(self, clear: bool = False):
@@ -533,6 +568,30 @@ class BossChecklistApp(QWidget):
             "stats": {"deaths": "--", "seconds_played": -1},
             "boss_statuses": {}
         }
+
+    def toggle_overlay_settings(self):
+        """Toggles the visibility of the overlay settings panel, ensuring the OBS panel is hidden."""
+        # Hide the other panel first
+        if self.obs_panel.isVisible():
+            self.obs_panel.setVisible(False)
+            self.obs_settings_button.setText("OBS Settings")
+
+        # Toggle the desired panel
+        is_visible = not self.overlay_settings_panel.isVisible()
+        self.overlay_settings_panel.setVisible(is_visible)
+        self.overlay_settings_button.setText("Hide Overlay Settings" if is_visible else "Overlay Settings")
+
+    def toggle_obs_settings(self):
+        """Toggles the visibility of the OBS settings panel, ensuring the overlay panel is hidden."""
+        # Hide the other panel first
+        if self.overlay_settings_panel.isVisible():
+            self.overlay_settings_panel.setVisible(False)
+            self.overlay_settings_button.setText("Overlay Settings")
+
+        # Toggle the desired panel
+        is_visible = not self.obs_panel.isVisible()
+        self.obs_panel.setVisible(is_visible)
+        self.obs_settings_button.setText("Hide OBS Settings" if is_visible else "OBS Settings")
 
 def main():
     app = QApplication(sys.argv)
