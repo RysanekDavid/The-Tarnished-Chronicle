@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QPushButton, QFileDialog, QLineEdit, QCheckBox, QFrame, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer, QSettings
+from PySide6.QtGui import QIcon
 
 from .styles import apply_app_styles
 from .overlay_window import OverlayWindow
@@ -14,7 +15,7 @@ from .overlay_manager import OverlayManager
 from .ui_components import (
     create_file_slot_layout, create_main_boss_area,
     create_overlay_settings_panel_layout, LocationSectionWidget, FooterWidget,
-    create_obs_panel_layout
+    create_obs_panel_layout, AchievementsSectionWidget
 )
 from .app_config import (
     RUST_CLI_TOOL_PATH_PLACEHOLDER,
@@ -28,6 +29,7 @@ from .boss_data_manager import BossDataManager
 from .save_monitor_logic import SaveMonitorLogic
 from .obs_manager import ObsManager
 from .timestamp_manager import TimestampManager
+from .achievement_manager import AchievementManager
 
 class BossChecklistApp(QWidget):
     def __init__(self):
@@ -42,6 +44,7 @@ class BossChecklistApp(QWidget):
             base_filename=DEFAULT_BOSS_REFERENCE_FILENAME,
             dlc_filename=DLC_BOSS_REFERENCE_FILENAME
         )
+        self.achievement_manager = AchievementManager("data/achievements.json")
         self.rust_cli_handler = RustCliHandler(RUST_CLI_TOOL_PATH_PLACEHOLDER)
         self.save_monitor_logic = SaveMonitorLogic(self.rust_cli_handler, self.boss_data_manager, self)
         self.last_known_stats = {}
@@ -125,6 +128,9 @@ class BossChecklistApp(QWidget):
         sidebar_layout.setSpacing(10)
         self.file_slot_layout = create_file_slot_layout(self)
         sidebar_layout.addLayout(self.file_slot_layout)
+
+        self.achievements_section = AchievementsSectionWidget()
+        sidebar_layout.addWidget(self.achievements_section)
         
         sidebar_layout.addStretch()
 
@@ -345,6 +351,14 @@ class BossChecklistApp(QWidget):
         
         self.update_main_boss_area()
 
+        # Update achievements
+        character_name = self.character_slot_combobox.currentData().get("character_name")
+        defeated_bosses = self.boss_data_manager.get_defeated_bosses_for_character(character_name)
+        self.achievement_manager.check_and_update_achievements(character_name, defeated_bosses)
+        unlocked_achievements = self.achievement_manager.get_unlocked_achievements(character_name)
+        all_achievements = self.achievement_manager.get_all_achievements()
+        self.achievements_section.update_achievements(all_achievements, unlocked_achievements)
+
     def handle_character_selection_change(self, index):
         self.save_monitor_logic.stop_monitoring()
         selected_data = self.character_slot_combobox.itemData(index)
@@ -356,6 +370,7 @@ class BossChecklistApp(QWidget):
             self.footer.update_stats({})
             self.update_main_boss_area(clear=True)
             self.overlay_manager.update_text({})
+            self.achievements_section.update_achievements([], set())
             return
         
         self.settings.setValue("lastCharacterIndex", index)
@@ -595,6 +610,12 @@ class BossChecklistApp(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    
+    # Set application icon
+    icon_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'icons', 'app_logo.png')
+    app_icon = QIcon(icon_path)
+    app.setWindowIcon(app_icon)
+    
     window = BossChecklistApp()
     window.show()
     sys.exit(app.exec())

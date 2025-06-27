@@ -138,3 +138,20 @@ class BossDataManager:
                         if boss.get("is_defeated", False):
                             defeated += 1
         return defeated, total
+
+    def get_defeated_bosses_for_character(self, character_name: str):
+        """
+        Returns a list of defeated boss dictionaries for the current data set.
+        This does not depend on the character, but on the loaded data,
+        which is updated per character.
+        """
+        defeated_bosses = []
+        if not self.boss_data_by_location:
+            return defeated_bosses
+        
+        for bosses_in_location in self.boss_data_by_location.values():
+            if isinstance(bosses_in_location, list):
+                for boss in bosses_in_location:
+                    if isinstance(boss, dict) and boss.get("is_defeated", False):
+                        defeated_bosses.append(boss)
+        return defeated_bosses

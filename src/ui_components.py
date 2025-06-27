@@ -128,6 +128,96 @@ def create_file_slot_layout(parent_widget):
 
     return main_v_layout
 
+class AchievementsSectionWidget(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("achievementsCard")
+        self.is_expanded = False
+        self._init_ui()
+
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.header_widget = QWidget()
+        self.header_widget.setObjectName("sidebarHeader")
+        header_layout = QHBoxLayout(self.header_widget)
+        header_layout.setContentsMargins(8, 12, 8, 12)
+        header_layout.setSpacing(10)
+
+        self.expand_button = QPushButton()
+        self.expand_button.setObjectName("expandButton")
+        self.expand_button.setFixedSize(24, 24)
+        self.expand_button.setIcon(QIcon("assets/icons/chevron-right.svg"))
+
+        icon_label = QLabel()
+        pixmap = create_colored_pixmap("assets/icons/award.svg", QColor(234, 179, 8), QSize(20, 20))
+        icon_label.setPixmap(pixmap)
+        icon_label.setFixedSize(22, 22)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        text_label = QLabel("Achievements")
+        text_label.setObjectName("sidebarHeader")
+
+        header_layout.addWidget(self.expand_button)
+        header_layout.addWidget(icon_label)
+        header_layout.addWidget(text_label, 1)
+
+        self.header_widget.mousePressEvent = self._toggle_expand
+        self.expand_button.clicked.connect(self._toggle_expand)
+
+        main_layout.addWidget(self.header_widget)
+
+        self.content_area = QWidget()
+        self.content_layout = QVBoxLayout(self.content_area)
+        self.content_layout.setContentsMargins(10, 5, 10, 10)
+        self.content_layout.setSpacing(5)
+        self.content_area.setVisible(False)
+        main_layout.addWidget(self.content_area)
+
+    def _toggle_expand(self, event=None):
+        self.is_expanded = not self.is_expanded
+        self.content_area.setVisible(self.is_expanded)
+        if self.is_expanded:
+            self.expand_button.setIcon(QIcon("assets/icons/chevron-down.svg"))
+        else:
+            self.expand_button.setIcon(QIcon("assets/icons/chevron-right.svg"))
+        self.header_widget.setProperty("expanded", self.is_expanded)
+        self.header_widget.style().unpolish(self.header_widget)
+        self.header_widget.style().polish(self.header_widget)
+
+    def update_achievements(self, achievements, unlocked_achievements):
+        # Clear previous achievement labels
+        while self.content_layout.count():
+            child = self.content_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        for achievement in achievements:
+            achievement_layout = QHBoxLayout()
+            icon_label = QLabel()
+            icon_label.setFixedSize(18, 18)
+            
+            is_unlocked = achievement["name"] in unlocked_achievements
+            
+            if is_unlocked:
+                pixmap = create_colored_pixmap("assets/icons/check-circle.svg", QColor("#A3BE8C"), QSize(16, 16))
+                tooltip = f"Unlocked: {achievement['description']}"
+            else:
+                pixmap = create_colored_pixmap("assets/icons/x.svg", QColor("#D8DEE9"), QSize(16, 16))
+                tooltip = f"Locked: {achievement['description']}"
+
+            icon_label.setPixmap(pixmap)
+            
+            name_label = QLabel(achievement["name"])
+            name_label.setToolTip(tooltip)
+            
+            achievement_layout.addWidget(icon_label)
+            achievement_layout.addWidget(name_label)
+            
+            self.content_layout.addLayout(achievement_layout)
+
 def create_main_boss_area(parent_widget):
     # ... (tato funkce zůstává beze změny) ...
     scroll_area = QScrollArea(parent_widget)
