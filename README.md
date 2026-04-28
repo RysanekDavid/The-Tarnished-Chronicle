@@ -9,7 +9,6 @@
 [![Latest Release](https://img.shields.io/github/v/release/RysanekDavid/The-Tarnished-Chronicle?style=for-the-badge)](https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/RysanekDavid/The-Tarnished-Chronicle/total?style=for-the-badge)](https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases)
 [![License](https://img.shields.io/github/license/RysanekDavid/The-Tarnished-Chronicle?style=for-the-badge&v=1)](LICENSE)
-[![Support Me on Ko-fi](https://img.shields.io/badge/Support%20Me-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/davidr94577)
 
 </div>
 
@@ -18,6 +17,8 @@
 ## 📖 About
 
 **The Tarnished's Chronicle** is a comprehensive desktop application for Windows designed for Elden Ring enthusiasts who want to meticulously track their journey through the Lands Between. This isn't just a static checklist – it's an interactive, visually appealing companion that monitors your progress in real-time and motivates you to explore every corner of the game world.
+
+Main site of the project: [NexusMods](https://www.nexusmods.com/eldenring/mods/8650?tab=description)
 
 ### ✨ Key Features
 
@@ -36,7 +37,7 @@
 
 ### Installation
 
-1. **Download** the latest `ER_Boss_Checklist_Setup.exe` from [Releases](https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/latest)
+1. **Download** the latest `ER_Boss_Checklist_Setup.exe` from [Releases](https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/latest) or from [NexusMods](https://www.nexusmods.com/eldenring/mods/8650?tab=description)
 2. **Run** the installer and follow the setup wizard
 3. **Launch** The Tarnished's Chronicle from your desktop or start menu
 
