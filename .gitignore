@@ -164,6 +164,9 @@ Icon?
 .directory
 # Application Data
 data/
+# Compiled Qt resources embed everything from data/ (zlib only, trivially
+# extractable) — keeping data/ private requires ignoring this file too
+resources_rc.py
 # Source for external libraries/tools
 er_save_lib_source/
 flag_extractor_cli/

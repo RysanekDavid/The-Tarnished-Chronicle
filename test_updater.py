@@ -46,7 +46,7 @@ def setup_test_environment():
         manifest = json.load(f)
     
     manifest["sha256"] = sha256
-    manifest["version"] = "1.0.5"  # Test version
+    manifest["version"] = "1.0.6"  # Test version
     
     with open("test_manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
@@ -85,7 +85,7 @@ def run_test_app():
     print("\nTest app will:")
     print("1. Show as version 1.0.4")
     print("2. Check for updates from localhost:8000")
-    print("3. Find version 1.0.5 available")
+    print("3. Find version 1.0.6 available")
     print("4. Allow you to test download")
     print("\nLaunching app...")
     
@@ -114,7 +114,7 @@ def main():
     print("TEST INSTRUCTIONS:")
     print("="*50)
     print("1. The app will start showing version 1.0.4")
-    print("2. It should detect update to 1.0.5")
+    print("2. It should detect update to 1.0.6")
     print("3. Click 'Yes' to test download")
     print("4. Watch console for download progress")
     print("5. Check if installer launches")

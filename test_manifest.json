@@ -1,8 +1,8 @@
 {
   "version": "1.0.6",
-  "url": "http://localhost:8000/ER_Boss_Checklist_Setup_Test.exe",
-  "sha256": "12c0992059c3bc2d4fd5a4903bdc366183c3a4c70e59b31b68bba9e36b12ddd9",
+  "url": "http://127.0.0.1:8000/ER_Boss_Checklist_Setup_Test.exe",
+  "sha256": "37ba0ef25fdd5ecb08fe2d45dfa6412d5ab7e7d79d703584fd509e6b675350ad",
   "notes": "Test update",
   "force": false,
-  "published_at": "2025-09-04T20:00:00Z"
+  "published_at": "2025-10-10T16:30:00Z"
 }

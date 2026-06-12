@@ -24,6 +24,9 @@ class AppLogic:
         self.last_play_time_snapshot = -1
         self.last_snapshot_real_time = -1
         self._actual_save_file_path = ""  # Store the real path without UI decorations
+        # Expansion state of location sections, keyed by location name.
+        # Loaded lazily from QSettings (self.app.settings does not exist yet here).
+        self._expansion_states = None
 
     def browse_for_save_file(self):
         """Opens a file dialog to select the Elden Ring save file with improved logic."""
@@ -442,12 +445,27 @@ class AppLogic:
         dialog = LocationDialog(boss_data, self.app)
         dialog.exec()
 
+    def _load_expansion_states(self):
+        """Returns the persistent expansion-state dict, loading it from
+        QSettings on first use. Surviving rebuilds (including clear=True
+        sequences) is what keeps sections expanded across save-file refreshes."""
+        if self._expansion_states is None and hasattr(self.app, "settings"):
+            saved = self.app.settings.value("ui/expandedSections", "") or ""
+            self._expansion_states = {name: True for name in saved.split("|") if name}
+        return self._expansion_states if self._expansion_states is not None else {}
+
+    def _on_section_expansion_changed(self, location_name: str, expanded: bool):
+        states = self._load_expansion_states()
+        states[location_name] = expanded
+        if hasattr(self.app, "settings"):
+            expanded_names = "|".join(sorted(n for n, e in states.items() if e))
+            self.app.settings.setValue("ui/expandedSections", expanded_names)
+
     def update_main_boss_area(self, clear: bool = False):
         """Updates the main boss area with the current boss data."""
-        expanded_states = {
-            name: widget.is_expanded
-            for name, widget in self.app.location_widgets.items()
-        }
+        expanded_states = self._load_expansion_states()
+        for name, widget in self.app.location_widgets.items():
+            expanded_states[name] = widget.is_expanded
         self._clear_boss_area()
 
         if clear:
@@ -460,6 +478,12 @@ class AppLogic:
         sorted_base_game_items, sorted_dlc_items = self._get_sorted_boss_data()
         self._create_boss_widgets(sorted_base_game_items, expanded_states)
         self._create_boss_widgets(sorted_dlc_items, expanded_states, is_dlc=True)
+
+        # Rebuilding loses per-row visibility, so the hide-defeated filter
+        # has to be applied again to the fresh widgets
+        if self.app.hide_defeated_checkbox.isChecked():
+            for widget in self.app.location_widgets.values():
+                widget.apply_status_filter(True)
 
     def _clear_boss_area(self):
         """Clears the main boss area of all widgets."""
@@ -534,10 +558,11 @@ class AppLogic:
             section_widget = LocationSectionWidget(loc, bosses, self.app)
             section_widget.boss_details_requested.connect(self.show_boss_details_dialog)
             section_widget.boss_location_requested.connect(self.show_location_dialog)
+            section_widget.expansion_changed.connect(self._on_section_expansion_changed)
             layout.insertWidget(layout.count() - 1, section_widget)
             self.app.location_widgets[loc] = section_widget
-            if loc in expanded_states:
-                section_widget.set_expanded(expanded_states[loc])
+            if expanded_states.get(loc):
+                section_widget.set_expanded(True)
     
     def start_update_download(self, manifest_data: dict):
         """

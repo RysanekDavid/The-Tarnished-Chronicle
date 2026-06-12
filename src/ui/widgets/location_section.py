@@ -13,6 +13,7 @@ from ...utils import get_resource_path
 class LocationSectionWidget(QFrame):
     boss_details_requested = Signal(dict)
     boss_location_requested = Signal(dict)
+    expansion_changed = Signal(str, bool)
 
     def __init__(self, location_name, bosses_data, parent=None):
         super().__init__(parent)
@@ -132,6 +133,9 @@ class LocationSectionWidget(QFrame):
             new_boss_info = next((b for b in new_bosses_data if b.get('name') == original_boss_info.get('name')), None)
             
             if new_boss_info:
+                # Keep the stored boss data current, otherwise apply_status_filter
+                # works with stale defeat statuses after a monitoring update
+                boss_name_item.setData(Qt.ItemDataRole.UserRole, new_boss_info)
                 is_defeated = new_boss_info.get("is_defeated", False)
                 status_icon_label = self.boss_table.cellWidget(row, 1)
                 if status_icon_label:
@@ -186,6 +190,7 @@ class LocationSectionWidget(QFrame):
         self.header_widget.style().unpolish(self.header_widget)
         self.header_widget.style().polish(self.header_widget)
         self._update_table_height()
+        self.expansion_changed.emit(self.location_name, self.is_expanded)
 
     def _on_details_button_clicked(self, boss_data):
         self.boss_details_requested.emit(boss_data)

@@ -1,7 +1,7 @@
 # src/overlay_manager.py
 
-from PySide6.QtWidgets import QColorDialog
-from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QApplication, QColorDialog
+from PySide6.QtCore import QPoint, QSettings
 from PySide6.QtGui import QColor
 
 from ...config.app_config import DEFAULT_OVERLAY_TEXT_COLOR_STR, DEFAULT_OVERLAY_FONT_SIZE_STR
@@ -42,6 +42,25 @@ class OverlayManager:
         self.show_time_checkbox.stateChanged.connect(self.force_ui_update)
         self.show_seconds_checkbox.stateChanged.connect(self.force_ui_update)
         self.show_last_boss_checkbox.stateChanged.connect(self.force_ui_update) # <--- NOVÉ PROPOJENÍ
+        self.overlay_window.position_changed.connect(self._save_overlay_position)
+
+    def _save_overlay_position(self, pos: QPoint):
+        self.settings.setValue("overlay/posX", pos.x())
+        self.settings.setValue("overlay/posY", pos.y())
+
+    def _load_overlay_position(self):
+        """Returns the saved overlay position, or None when there is none
+        or it lies outside all current screens (e.g. unplugged monitor)."""
+        if not self.settings.contains("overlay/posX"):
+            return None
+        pos = QPoint(
+            self.settings.value("overlay/posX", 0, type=int),
+            self.settings.value("overlay/posY", 0, type=int),
+        )
+        for screen in QApplication.screens():
+            if screen.geometry().contains(pos):
+                return pos
+        return None
 
     def load_settings(self):
         """Načte uložená nastavení a aplikuje je na UI prvky."""
@@ -116,7 +135,7 @@ class OverlayManager:
             self._render_text()
             
             # 4. Až TEĎ, s již připraveným a nastaveným textem, okno zobrazíme.
-            self.overlay_window.show_overlay()
+            self.overlay_window.show_overlay(self._load_overlay_position())
         else:
             # Při vypnutí okno jednoduše skryjeme.
             self.overlay_window.hide_overlay() # Použijeme metodu z OverlayWindow pro konzistenci

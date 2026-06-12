@@ -1,8 +1,10 @@
 # src/overlay_window.py
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, Signal
 
 class OverlayWindow(QWidget):
+    position_changed = Signal(QPoint)
+
     def __init__(self, parent=None, text_color="white", font_size="15pt"):
         super().__init__(parent)
         # Nastavení okna, aby bylo bez rámečků, vždy nahoře a s průhledným pozadím
@@ -29,6 +31,7 @@ class OverlayWindow(QWidget):
 
         # Uložíme si pozici pro přesouvání myší
         self._drag_pos = QPoint(0,0)
+        self._was_dragged = False
 
     def _apply_styles(self):
         """Aplikuje aktuální CSS styly na widgety."""
@@ -60,11 +63,14 @@ class OverlayWindow(QWidget):
         self.label.setText(text)
         self.adjustSize()
 
-    def show_overlay(self):
-        """Zobrazí okno vpravo nahoře."""
-        screen_geometry = QApplication.primaryScreen().geometry()
-        # Přesuneme okno do pravého horního rohu s malým okrajem (20px)
-        self.move(screen_geometry.width() - self.width() - 20, 20)
+    def show_overlay(self, position: QPoint | None = None):
+        """Zobrazí okno na uložené pozici, jinak vpravo nahoře."""
+        if position is not None:
+            self.move(position)
+        else:
+            screen_geometry = QApplication.primaryScreen().geometry()
+            # Přesuneme okno do pravého horního rohu s malým okrajem (20px)
+            self.move(screen_geometry.width() - self.width() - 20, 20)
         self.show()
 
     def hide_overlay(self):
@@ -82,9 +88,13 @@ class OverlayWindow(QWidget):
         """Přesouvá okno, pokud je levé tlačítko myši drženo."""
         if event.buttons() == Qt.MouseButton.LeftButton:
             self.move(event.globalPosition().toPoint() - self._drag_pos)
+            self._was_dragged = True
             event.accept()
 
     def mouseReleaseEvent(self, event):
-        """Resetuje pozici po uvolnění tlačítka."""
+        """Resetuje pozici po uvolnění tlačítka a oznámí nové umístění."""
         self._drag_pos = QPoint(0,0)
+        if self._was_dragged:
+            self._was_dragged = False
+            self.position_changed.emit(self.pos())
         event.accept()
