@@ -1,8 +1,8 @@
 {
-  "version": "1.0.6",
-  "url": "https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/download/v1.0.6/The_Tarnished_Chronicle_Setup.exe",
-  "sha256": "1ac9d426baff3ac1ad73927c183135a5044b5fd2c737b30e5a784b7b9a463726",
-  "notes": "Improved Save File Reading - Now reads character data from the correct location for better accuracy\nEnhanced Compatibility - Should now work with all save files",
+  "version": "1.0.7",
+  "url": "https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/download/v1.0.7/ER_Boss_Checklist_Setup.exe",
+  "sha256": "aae810100d9407f88049548060bd8459ff79874a170ea21f1b5e57462b15c7e2",
+  "notes": "Fixed save loading for modded games (Seamless Coop, randomizers, saves with deleted characters)\nBetter error messages when a save cannot be read\nExpanded locations stay expanded when the save file updates\n'Hide defeated bosses' now applies to newly defeated bosses automatically\nOverlay remembers its position after you move it",
   "force": false,
-  "published_at": "2025-10-10T16:30:00Z"
+  "published_at": "2026-06-12T00:30:00Z"
 }
