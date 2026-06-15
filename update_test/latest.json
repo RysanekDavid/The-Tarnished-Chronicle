@@ -1,8 +1,8 @@
 {
-  "version": "1.0.7",
-  "url": "https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/download/v1.0.7/ER_Boss_Checklist_Setup.exe",
-  "sha256": "aae810100d9407f88049548060bd8459ff79874a170ea21f1b5e57462b15c7e2",
-  "notes": "Fixed save loading for modded games (Seamless Coop, randomizers, saves with deleted characters)\nBetter error messages when a save cannot be read\nExpanded locations stay expanded when the save file updates\n'Hide defeated bosses' now applies to newly defeated bosses automatically\nOverlay remembers its position after you move it",
+  "version": "1.0.8",
+  "url": "https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/download/v1.0.8/ER_Boss_Checklist_Setup.exe",
+  "sha256": "a1b584de51d3552b72341b281a7c739f8f34abced87f63c533a59534e5615a1c",
+  "notes": "Interactive overlay: press F8 in-game to switch between compact stats and a full scrollable boss checklist, press F9 to click through it\nOverlay stays visible when the main window is minimized\nMuch faster character loading and no more stutter while streaming\nLive timer keeps ticking in the OBS time file between save updates\nNew boss filters: hide mini-dungeon bosses, show main story bosses only, or pick your own custom set (great for boss-rush challenges with friends)",
   "force": false,
-  "published_at": "2026-06-12T00:30:00Z"
+  "published_at": "2026-06-15T22:11:00Z"
 }
