@@ -73,6 +73,19 @@ def create_file_slot_layout(parent_widget):
     main_v_layout.addWidget(parent_widget.content_filter_combobox)
     main_v_layout.addSpacing(10)
 
+    # Boss Type Filter (for challenge runs / randomizer races)
+    parent_widget.type_filter_combobox = QComboBox()
+    parent_widget.type_filter_combobox.addItem("All Bosses", userData="all")
+    parent_widget.type_filter_combobox.addItem("No Mini-Dungeon Bosses", userData="no_minidungeon")
+    parent_widget.type_filter_combobox.addItem("Main Bosses Only", userData="main")
+    parent_widget.type_filter_combobox.addItem("Custom Selection", userData="custom")
+    main_v_layout.addWidget(parent_widget.type_filter_combobox)
+
+    parent_widget.edit_custom_filter_button = QPushButton("Edit Custom Selection...")
+    parent_widget.edit_custom_filter_button.setVisible(False)
+    main_v_layout.addWidget(parent_widget.edit_custom_filter_button)
+    main_v_layout.addSpacing(10)
+
     # Display Filter (Hide Defeated)
     parent_widget.hide_defeated_checkbox = QCheckBox("Hide Defeated Bosses")
     parent_widget.hide_defeated_checkbox.setObjectName("hideDefeatedCheckbox")

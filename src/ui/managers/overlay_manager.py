@@ -1,11 +1,14 @@
 # src/overlay_manager.py
 
+from html import escape
+
 from PySide6.QtWidgets import QApplication, QColorDialog
 from PySide6.QtCore import QPoint, QSettings
 from PySide6.QtGui import QColor
 
 from ...config.app_config import DEFAULT_OVERLAY_TEXT_COLOR_STR, DEFAULT_OVERLAY_FONT_SIZE_STR
 from ...utils import format_seconds_to_hms
+from .global_hotkeys import GlobalHotkeys, VK_F8, VK_F9
 
 class OverlayManager:
     def __init__(self, main_app_ref, overlay_window_ref, settings_panel_ref,
@@ -29,9 +32,14 @@ class OverlayManager:
         
         self.settings = QSettings("TheTarnishedChronicle", "App")
         self.last_known_stats = {}
-        
+
+        self._mode = self.settings.value("overlay/mode", "mini")
+        self._last_boss_list_key = None
+        self.hotkeys = GlobalHotkeys()
+
         self.load_settings()
         self.connect_signals()
+        self.overlay_window.set_mode(self._mode)
 
     def connect_signals(self):
         """Propojí UI prvky s jejich funkcemi."""
@@ -135,10 +143,29 @@ class OverlayManager:
             self._render_text()
             
             # 4. Až TEĎ, s již připraveným a nastaveným textem, okno zobrazíme.
+            self._last_boss_list_key = None  # Force a rebuild of the boss list
+            self._refresh_boss_list()
             self.overlay_window.show_overlay(self._load_overlay_position())
+
+            # Hotkeys live only while the overlay is visible, so F8/F9
+            # stay free for other apps the rest of the time.
+            self.hotkeys.register(VK_F8, self.toggle_mode)
+            self.hotkeys.register(VK_F9, self.toggle_click_through)
         else:
+            self.hotkeys.unregister_all()
             # Při vypnutí okno jednoduše skryjeme.
             self.overlay_window.hide_overlay() # Použijeme metodu z OverlayWindow pro konzistenci
+
+    def toggle_mode(self):
+        """Switches the overlay between 'mini' and 'full' (boss list) mode."""
+        self._mode = "full" if self._mode == "mini" else "mini"
+        self.settings.setValue("overlay/mode", self._mode)
+        self._last_boss_list_key = None
+        self._refresh_boss_list()
+        self.overlay_window.set_mode(self._mode)
+
+    def toggle_click_through(self):
+        self.overlay_window.set_click_through(not self.overlay_window.is_click_through())
 
 
     def update_text(self, stats: dict):
@@ -150,6 +177,7 @@ class OverlayManager:
         # Pokud je overlay viditelný, okamžitě překreslíme text.
         if self.overlay_window.isVisible():
             self._render_text()
+            self._refresh_boss_list()
 
     def force_ui_update(self):
         """Vynutí překreslení textu na základě posledních známých dat a aktuálního nastavení."""
@@ -157,11 +185,54 @@ class OverlayManager:
         if self.app.save_monitor_logic.current_slot_index != -1:
             self._render_text()
             
+    def _refresh_boss_list(self):
+        """Rebuilds the full-mode boss list, but only when the underlying
+        data actually changed — update_text() fires every second for the
+        live timer and rebuilding rich text that often would be wasteful."""
+        if self._mode != "full":
+            return
+
+        data = self.app.boss_data_manager.get_boss_data_by_location()
+        key = tuple(
+            (location, tuple(
+                (boss.get("name"), bool(boss.get("is_defeated")))
+                for boss in bosses if isinstance(boss, dict)
+            ))
+            for location, bosses in data.items() if isinstance(bosses, list)
+        )
+        if key == self._last_boss_list_key:
+            return
+        self._last_boss_list_key = key
+        self.overlay_window.set_boss_list_html(self._build_boss_list_html(data))
+
+    def _build_boss_list_html(self, data: dict) -> str:
+        rows = []
+        for location, bosses in data.items():
+            if not isinstance(bosses, list) or not bosses:
+                continue
+            valid = [b for b in bosses if isinstance(b, dict)]
+            defeated = sum(1 for b in valid if b.get("is_defeated"))
+            rows.append(
+                f"<div style='margin-top:8px;'><span style='color:#88C0D0;'>"
+                f"{escape(str(location))} ({defeated}/{len(valid)})</span></div>"
+            )
+            for boss in valid:
+                name = escape(str(boss.get("name", "Unknown")))
+                if boss.get("is_defeated"):
+                    rows.append(f"<div style='color:#A3BE8C;'>✓ <s>{name}</s></div>")
+                else:
+                    rows.append(f"<div style='color:#D8DEE9;'>○ {name}</div>")
+
+        if not rows:
+            return "<i>Select a character...</i>"
+        return (
+            "<div style='font-size:10pt; font-weight:normal;'>"
+            + "".join(rows)
+            + "</div>"
+        )
+
     def _render_text(self):
         """Interní metoda, která sestaví a zobrazí finální text v overlayi."""
-        # --- DEBUG PRINT ---
-        print(f"--- DEBUG: OverlayManager._render_text() called. Data: {self.last_known_stats} ---")
-        # --- END DEBUG PRINT ---
         if not self.last_known_stats:
             self.overlay_window.set_text("Select a character...")
             return

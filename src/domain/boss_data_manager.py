@@ -5,6 +5,75 @@ import re
 from PySide6.QtCore import QFile, QIODevice
 from .stats_manager import StatsManager
 
+
+def _normalize_name(text: str) -> str:
+    return "".join(filter(str.isalnum, text)).lower()
+
+
+# Remembrance bosses + mandatory story bosses (the path from Morgott to the
+# Elden Beast is fixed: Draconic Tree Sentinel, Godfrey's shade, Godskin Duo
+# and Gideon must all be defeated) — exact names as in the data files
+MAIN_BOSS_NAMES = {
+    "Margit, the Fell Omen",
+    "Draconic Tree Sentinel",
+    "Godfrey, First Elden Lord",
+    "Godskin Duo",
+    "Sir Gideon Ofnir, the All-Knowing",
+    "Godrick the Grafted",
+    "Rennala, Queen of the Full Moon",
+    "Starscourge Radahn",
+    "Morgott, the Omen King",
+    "Rykard, Lord of Blasphemy",
+    "Malenia, Blade of Miquella",
+    "Mohg, Lord of Blood",
+    "Maliketh, the Black Blade",
+    "Fire Giant",
+    "Godfrey, First Elden Lord (Hoarah Loux)",
+    "Radagon of the Golden Order & Elden Beast",
+    "Dragonlord Placidusax",
+    "Astel, Naturalborn of the Void",
+    "Regal Ancestor Spirit",
+    "Lichdragon Fortissax",
+    # DLC remembrances
+    "Divine Beast Dancing Lion",
+    "Rellana, Twin Moon Knight",
+    "Putrescent Knight",
+    "Messmer the Impaler",
+    "Romina, Saint of the Bud",
+    "Scadutree Avatar",
+    "Commander Gaius",
+    "Midra Lord of Frenzied Flame",
+    "Metyr, Mother of Fingers",
+    "Bayle the Dread",
+    "Promised Consort Radahn",
+}
+_MAIN_BOSS_KEYS = {_normalize_name(n) for n in MAIN_BOSS_NAMES}
+
+# Event flag IDs encode the map: 8-digit IDs with these prefixes are
+# catacombs/caves/tunnels/divine towers and the DLC gaols/forges/caves
+_MINI_DUNGEON_ID_PREFIXES = ("30", "31", "32", "34", "39", "40", "41", "43")
+
+
+def get_boss_category(boss_info: dict) -> str:
+    """Returns 'main', 'overworld', 'minidungeon' or 'legacy'.
+
+    Derived from the boss name (remembrances) and the event flag ID,
+    whose leading digits encode the in-game map. 10-digit IDs are
+    open-world map tiles; 8-digit IDs are dungeon maps.
+    """
+    if _normalize_name(boss_info.get("name", "")) in _MAIN_BOSS_KEYS:
+        return "main"
+    event_id = boss_info.get("event_id")
+    if isinstance(event_id, list):
+        event_id = event_id[0] if event_id else None
+    id_str = str(event_id) if event_id is not None else ""
+    if len(id_str) >= 10:
+        return "overworld"
+    if id_str[:2] in _MINI_DUNGEON_ID_PREFIXES:
+        return "minidungeon"
+    return "legacy"
+
+
 class BossDataManager:
     def __init__(self, base_filename="boss_ids_reference.json", dlc_filename="boss_ids_reference_DLC.json", descriptions_filename="boss_descriptions.json", dlc_descriptions_filename="boss_descriptions_DLC.json"):
         self.base_filename = base_filename
@@ -28,7 +97,12 @@ class BossDataManager:
         self.boss_data_by_location = {}
         
         self.all_event_ids_to_monitor = []
-        
+
+        # Filters applied when building the active template
+        self._content_filter = "base"
+        self._type_filter = "all"  # all | no_minidungeon | main | custom
+        self._custom_preset_ids = set()  # event IDs (as str) for the custom preset
+
 
     def _load_json_file(self, filename):
         """Loads and validates a single JSON file from the Qt Resource System."""
@@ -74,11 +148,39 @@ class BossDataManager:
         return True, "Definitions loaded."
 
     def set_content_filter(self, filter_mode: str):
-        """
-        Builds the final boss data based on the selected filter mode ('all', 'base', 'dlc').
-        This replaces the old set_dlc_inclusion method.
-        """
+        """Sets the content filter ('all', 'base', 'dlc') and rebuilds the template."""
         print(f"Setting content filter to: {filter_mode}")
+        self._content_filter = filter_mode
+        self._rebuild_template()
+
+    def set_type_filter(self, type_mode: str):
+        """Sets the boss type filter ('all', 'no_minidungeon', 'main', 'custom')
+        and rebuilds the template."""
+        print(f"Setting boss type filter to: {type_mode}")
+        self._type_filter = type_mode
+        self._rebuild_template()
+
+    def set_custom_preset(self, event_ids):
+        """Sets the event IDs for the custom preset. Rebuilds only when the
+        custom filter is active."""
+        self._custom_preset_ids = {str(eid) for eid in event_ids}
+        if self._type_filter == "custom":
+            self._rebuild_template()
+
+    def get_custom_preset(self):
+        return set(self._custom_preset_ids)
+
+    def get_unfiltered_locations(self):
+        """Returns {location: [boss, ...]} for base + DLC data, ignoring all
+        filters. Used by the custom preset dialog."""
+        combined = copy.deepcopy(self._base_data)
+        for location, dlc_bosses in self._dlc_data.items():
+            combined.setdefault(location, []).extend(copy.deepcopy(dlc_bosses))
+        return combined
+
+    def _rebuild_template(self):
+        """Builds the active template from content filter + boss type filter."""
+        filter_mode = self._content_filter
         final_data = {}
 
         if filter_mode == "all":
@@ -93,16 +195,44 @@ class BossDataManager:
             final_data = copy.deepcopy(self._dlc_data)
         else: # Default to "base"
             final_data = copy.deepcopy(self._base_data)
-        
+
+        final_data = self._apply_type_filter(final_data)
+
         # Store the merged data as the clean template for the current view
         self._active_data_template = self._merge_descriptions(self._merge_stats_into_boss_data(final_data))
-        
+
         # The character-specific data is now stale, so we clear it.
         # It will be rebuilt when a character is loaded or statuses are updated.
         self.boss_data_by_location = {}
-        
+
         self._recalculate_event_ids()
         print(f"Data template updated. Total event IDs: {len(self.all_event_ids_to_monitor)}")
+
+    def _apply_type_filter(self, boss_data):
+        """Filters bosses by the active type filter; drops empty locations."""
+        mode = self._type_filter
+        if mode == "all":
+            return boss_data
+
+        filtered = {}
+        for location, bosses in boss_data.items():
+            kept = []
+            for boss_info in bosses:
+                if mode == "custom":
+                    event_id = boss_info.get("event_id")
+                    ids = event_id if isinstance(event_id, list) else [event_id]
+                    if any(str(eid) in self._custom_preset_ids for eid in ids):
+                        kept.append(boss_info)
+                    continue
+
+                category = get_boss_category(boss_info)
+                if mode == "no_minidungeon" and category != "minidungeon":
+                    kept.append(boss_info)
+                elif mode == "main" and category == "main":
+                    kept.append(boss_info)
+            if kept:
+                filtered[location] = kept
+        return filtered
 
     def _normalize_key(self, text: str) -> str:
         """Creates a simplified, consistent key from a string by keeping only alphanumeric characters."""

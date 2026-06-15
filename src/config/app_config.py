@@ -1,7 +1,7 @@
 # src/app_config.py
 
 # Verze aplikace
-APP_VERSION = "1.0.7"
+APP_VERSION = "1.0.8"
 
 # URL k manifestu s nejnovější verzí "https://raw.githubusercontent.com/RysanekDavid/The-Tarnished-Chronicle/main/update_test/latest.json"
 MANIFEST_URL = "https://raw.githubusercontent.com/RysanekDavid/The-Tarnished-Chronicle/main/update_test/latest.json"

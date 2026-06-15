@@ -1,6 +1,7 @@
 # src/gui.py
 import sys
 import os
+import json
 import time
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -51,6 +52,8 @@ class BossChecklistApp(QWidget):
         self.boss_data_manager.load_definitions()
         self._init_ui()
         self.load_and_apply_filters()
+        self.boss_data_manager.set_custom_preset(self._load_custom_preset_ids())
+        self.boss_data_manager.set_type_filter(self.type_filter_combobox.currentData())
         self.boss_data_manager.set_content_filter(self.content_filter_combobox.currentData())
         self._init_overlay_and_obs_managers()
         self._connect_signals()
@@ -166,7 +169,9 @@ class BossChecklistApp(QWidget):
         content_layout.setContentsMargins(15, 10, 15, 10)
         content_layout.setSpacing(10)
         
-        self.overlay_window = OverlayWindow(self)
+        # No parent on purpose: a parented Qt.Tool window is hidden by Windows
+        # whenever the main window is minimized, taking the overlay with it.
+        self.overlay_window = OverlayWindow()
         
         top_buttons_layout = QHBoxLayout()
         self.toggle_overlay_button = QPushButton("Toggle Overlay")
@@ -217,6 +222,8 @@ class BossChecklistApp(QWidget):
         self.character_slot_combobox.currentIndexChanged.connect(self.obs_manager.on_character_changed)
         
         self.content_filter_combobox.currentIndexChanged.connect(self.app_logic.handle_content_filter_change)
+        self.type_filter_combobox.currentIndexChanged.connect(self.app_logic.handle_type_filter_change)
+        self.edit_custom_filter_button.clicked.connect(self.app_logic.open_custom_filter_dialog)
         self.hide_defeated_checkbox.stateChanged.connect(self.app_logic.handle_status_filter_change)
         
         self.search_bar.textChanged.connect(self.app_logic.on_search_text_changed)
@@ -239,9 +246,25 @@ class BossChecklistApp(QWidget):
         if index != -1:
             self.content_filter_combobox.setCurrentIndex(index)
         
+        # Boss Type Filter
+        saved_type_mode = self.settings.value("filters/typeMode", "all", type=str)
+        index = self.type_filter_combobox.findData(saved_type_mode)
+        if index != -1:
+            self.type_filter_combobox.setCurrentIndex(index)
+        self.edit_custom_filter_button.setVisible(saved_type_mode == "custom")
+
         # Hide Defeated Filter
         hide_defeated = self.settings.value("filters/hideDefeated", False, type=bool)
         self.hide_defeated_checkbox.setChecked(hide_defeated)
+
+    def _load_custom_preset_ids(self):
+        """Loads the saved custom boss preset (list of event IDs) from QSettings."""
+        saved = self.settings.value("filters/customPresetIds", "[]", type=str)
+        try:
+            return {str(eid) for eid in json.loads(saved)}
+        except (ValueError, TypeError):
+            print(f"Warning: invalid custom preset in settings, ignoring: {saved!r}")
+            return set()
 
     def update_onboarding_state(self, state: str):
         """

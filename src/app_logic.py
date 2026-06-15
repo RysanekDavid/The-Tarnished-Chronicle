@@ -1,6 +1,7 @@
 # src/app_logic.py
 
 import os
+import json
 import time
 import hashlib
 import tempfile
@@ -210,23 +211,59 @@ class AppLogic:
         self.app.save_monitor_logic.start_monitoring(
             save_file_path,
             slot_index,
-            selected_data["character_name"]
+            selected_data["character_name"],
+            initial_data=initial_data,
         )
 
     def handle_content_filter_change(self):
         """Handles changes to the Content Filter (Base/DLC/All)."""
         filter_mode = self.app.content_filter_combobox.currentData()
         print(f"Content filter changed to: {filter_mode}")
-        
+
         self.app.settings.setValue("filters/contentMode", filter_mode)
-        
+
         self.app.boss_data_manager.set_content_filter(filter_mode)
-        
+
+        self._refresh_after_filter_change()
+
+    def _refresh_after_filter_change(self):
         current_index = self.app.character_slot_combobox.currentIndex()
         if current_index > 0:
             self.handle_character_selection_change(current_index)
         else:
             self.update_main_boss_area()
+
+    def handle_type_filter_change(self):
+        """Handles changes to the Boss Type Filter (all/no_minidungeon/main/custom)."""
+        type_mode = self.app.type_filter_combobox.currentData()
+        print(f"Boss type filter changed to: {type_mode}")
+
+        self.app.settings.setValue("filters/typeMode", type_mode)
+        self.app.edit_custom_filter_button.setVisible(type_mode == "custom")
+
+        self.app.boss_data_manager.set_type_filter(type_mode)
+        self._refresh_after_filter_change()
+
+    def open_custom_filter_dialog(self):
+        """Opens the dialog for picking a custom set of bosses."""
+        from .ui.dialogs.custom_boss_filter_dialog import CustomBossFilterDialog
+
+        manager = self.app.boss_data_manager
+        dialog = CustomBossFilterDialog(
+            manager.get_unfiltered_locations(),
+            manager.get_custom_preset(),
+            self.app,
+        )
+        if not dialog.exec():
+            return
+
+        selected_ids = dialog.selected_event_ids()
+        self.app.settings.setValue(
+            "filters/customPresetIds", json.dumps(sorted(selected_ids))
+        )
+        manager.set_custom_preset(selected_ids)
+        if self.app.type_filter_combobox.currentData() == "custom":
+            self._refresh_after_filter_change()
 
     def handle_status_filter_change(self):
         """Handles the 'Hide Defeated Bosses' checkbox."""
@@ -380,9 +417,10 @@ class AppLogic:
         
         live_play_time = self.last_play_time_snapshot + real_time_elapsed
         
-        # Update the main stats section and the overlay
+        # Update the main stats section, the OBS time file and the overlay
         self.app.stats_section.update_playtime(int(live_play_time))
-        
+        self.app.obs_manager.update_time_file(int(live_play_time))
+
         if self.app.overlay_manager.overlay_window.isVisible():
             stats = self.last_known_stats.get("stats", {}).copy()
             stats['seconds_played'] = int(live_play_time)

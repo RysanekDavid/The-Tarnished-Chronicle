@@ -49,6 +49,7 @@ class ObsManager:
 
         self.settings = QSettings("TheTarnishedChronicle", "App")
         self.death_offset = 0 # This will hold the offset for the CURRENT character
+        self._last_time_text = None # Avoids rewriting time.txt when the text hasn't changed
         self._load_settings()
         self.connect_signals()
         self.handle_state_change() # Apply initial enabled/disabled state
@@ -294,6 +295,7 @@ class ObsManager:
         if self.time_enabled.isChecked():
             path = os.path.join(folder, "time.txt")
             text = self.time_format.text().format(time=time_str)
+            self._last_time_text = text
             self._write_file(path, text)
 
         # Zápis do last_boss.txt
@@ -308,6 +310,22 @@ class ObsManager:
             else:
                 text = "" # Clear the file if no boss has been killed
             self._write_file(path, text)
+
+    def update_time_file(self, seconds: int):
+        """Writes the live play time to time.txt. Called every second by the UI
+        timer so the OBS overlay keeps ticking between save-file updates."""
+        if not self.enable_toggle.isChecked() or not self.time_enabled.isChecked():
+            return
+        folder = self.folder_label.text()
+        if not folder or folder == "Not set.":
+            return
+
+        time_str = format_seconds_to_hms(seconds) if seconds >= 0 else "--:--:--"
+        text = self.time_format.text().format(time=time_str)
+        if text == self._last_time_text:
+            return
+        self._last_time_text = text
+        self._write_file(os.path.join(folder, "time.txt"), text)
 
     def _write_file(self, path, content):
         """Pomocná metoda pro bezpečný zápis do souboru."""

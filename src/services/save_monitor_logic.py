@@ -3,10 +3,47 @@ import os
 import time
 import json
 import psutil # <--- NEW IMPORT
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer, QThreadPool, QRunnable
 from .rust_cli_handler import RustCliHandler
 from ..domain.boss_data_manager import BossDataManager
 from ..config.app_config import DEFAULT_MONITORING_INTERVAL_SEC
+
+
+class _StatusWorkerSignals(QObject):
+    # (data | None, error | None, game_is_running)
+    finished = Signal(object, object, bool)
+
+
+class _StatusWorker(QRunnable):
+    """Runs the blocking save-file parse and process check off the GUI thread.
+
+    The Rust CLI parse (~0.2s) used to run on the GUI thread every few seconds,
+    causing a visible stutter — bad while streaming. Doing it here keeps the UI
+    smooth; results are marshalled back via a queued signal.
+    """
+
+    def __init__(self, rust_cli, save_file_path, slot_index, event_ids):
+        super().__init__()
+        self.rust_cli = rust_cli
+        self.save_file_path = save_file_path
+        self.slot_index = slot_index
+        self.event_ids = event_ids
+        self.signals = _StatusWorkerSignals()
+
+    @staticmethod
+    def _is_game_running():
+        for proc in psutil.process_iter(['name']):
+            if (proc.info['name'] or "").lower() == "eldenring.exe":
+                return True
+        return False
+
+    def run(self):
+        is_running = self._is_game_running()
+        new_data, err = self.rust_cli.get_full_status(
+            self.save_file_path, self.slot_index, self.event_ids
+        )
+        self.signals.finished.emit(new_data, err, is_running)
+
 
 class SaveMonitorLogic(QObject):
     monitoring_started = Signal(str, int)
@@ -14,36 +51,40 @@ class SaveMonitorLogic(QObject):
     stats_updated = Signal(dict)
     boss_defeated = Signal(str, int)
     game_process_status = Signal(bool) # <--- NEW SIGNAL (is_running)
-    
+
     def __init__(self, rust_cli_handler: RustCliHandler, boss_data_manager: BossDataManager, parent=None):
         super().__init__(parent)
         self.rust_cli = rust_cli_handler
         self.boss_data_manager = boss_data_manager
-        
+
         self.monitoring_timer = QTimer(self)
         self.monitoring_timer.timeout.connect(self.on_monitoring_timeout)
         self.monitoring_interval_sec = DEFAULT_MONITORING_INTERVAL_SEC
-        
+
         self.current_save_file_path = ""
         self.current_slot_index = -1
         self.last_known_data = None
         self.game_process_is_running = False # <--- NEW STATE VARIABLE
 
-    def _is_game_running(self):
-        """Checks if eldenring.exe is a running process."""
-        for proc in psutil.process_iter(['name']):
-            if proc.info['name'].lower() == "eldenring.exe":
-                return True
-        return False
+        self._thread_pool = QThreadPool.globalInstance()
+        self._poll_in_flight = False # Skip a tick if the previous parse is still running
 
-    def start_monitoring(self, save_file_path: str, slot_index: int, character_name: str):
+    def start_monitoring(self, save_file_path: str, slot_index: int, character_name: str,
+                         initial_data: dict | None = None):
         self.stop_monitoring()
         self.current_save_file_path = save_file_path
         self.current_slot_index = slot_index
-        
-        # Use a single-shot timer to ensure the first check happens after the event loop is ready
-        QTimer.singleShot(0, self.on_monitoring_timeout)
-        
+        # Seed with the data the caller already fetched so the monitor doesn't
+        # immediately re-parse the same file (avoids a redundant parse on select).
+        self.last_known_data = initial_data
+
+        # Immediate, cheap process check so the live timer starts right away
+        # instead of waiting for the first 5s data tick.
+        is_running = _StatusWorker._is_game_running()
+        if is_running != self.game_process_is_running:
+            self.game_process_is_running = is_running
+            self.game_process_status.emit(is_running)
+
         self.monitoring_timer.start(self.monitoring_interval_sec * 1000)
         self.monitoring_started.emit(character_name, self.monitoring_interval_sec)
 
@@ -55,27 +96,36 @@ class SaveMonitorLogic(QObject):
             self.monitoring_stopped.emit()
 
     def on_monitoring_timeout(self):
-        """Loads full data from the file and compares it."""
-        # --- NEW PROCESS CHECK ---
-        is_running = self._is_game_running()
-        print(f"[Monitor] Checking game process... Running: {is_running}, Previous State: {self.game_process_is_running}") # DEBUG
-        if is_running != self.game_process_is_running:
-            print(f"[Monitor] Game process state changed to: {is_running}. Emitting signal.") # DEBUG
-            self.game_process_is_running = is_running
-            self.game_process_status.emit(is_running)
-        
+        """Dispatches the parse to a worker thread; result handled in _on_status_ready."""
         if self.current_slot_index == -1:
+            return
+        if self._poll_in_flight:
+            # Previous parse hasn't returned yet (e.g. slow disk); skip this tick.
             return
 
         all_event_ids = self.boss_data_manager.get_all_event_ids_to_monitor()
         if not all_event_ids:
             return
 
-        new_data, err = self.rust_cli.get_full_status(
-            self.current_save_file_path,
-            self.current_slot_index,
-            all_event_ids
+        self._poll_in_flight = True
+        worker = _StatusWorker(
+            self.rust_cli, self.current_save_file_path, self.current_slot_index, all_event_ids
         )
+        worker.signals.finished.connect(self._on_status_ready)
+        self._thread_pool.start(worker)
+
+    def _on_status_ready(self, new_data, err, is_running):
+        """Runs on the GUI thread (queued signal): diffs and emits updates."""
+        self._poll_in_flight = False
+
+        # Game process state change
+        if is_running != self.game_process_is_running:
+            self.game_process_is_running = is_running
+            self.game_process_status.emit(is_running)
+
+        # Ignore late results after the character was deselected mid-flight.
+        if self.current_slot_index == -1:
+            return
 
         if err or new_data is None:
             print(f"Monitoring Error: {err or 'No data returned'}")
@@ -90,8 +140,6 @@ class SaveMonitorLogic(QObject):
             for boss_id, is_defeated in new_statuses.items():
                 # If the boss is now defeated but wasn't before
                 if is_defeated and not old_statuses.get(boss_id, False):
-                    # We need to find the boss name from its ID.
-                    # This is a bit tricky here. We will emit the ID and let the GUI find the name.
                     self.boss_defeated.emit(boss_id, current_play_time)
 
         # --- ROBUST COMPARISON FIX ---
