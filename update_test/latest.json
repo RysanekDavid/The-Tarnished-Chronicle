@@ -1,8 +1,8 @@
 {
-  "version": "1.0.8",
-  "url": "https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/download/v1.0.8/ER_Boss_Checklist_Setup.exe",
-  "sha256": "a1b584de51d3552b72341b281a7c739f8f34abced87f63c533a59534e5615a1c",
-  "notes": "Interactive overlay: press F8 in-game to switch between compact stats and a full scrollable boss checklist, press F9 to click through it\nOverlay stays visible when the main window is minimized\nMuch faster character loading and no more stutter while streaming\nLive timer keeps ticking in the OBS time file between save updates\nNew boss filters: hide mini-dungeon bosses, show main story bosses only, or pick your own custom set (great for boss-rush challenges with friends)",
+  "version": "1.0.9",
+  "url": "https://github.com/RysanekDavid/The-Tarnished-Chronicle/releases/download/v1.0.9/ER_Boss_Checklist_Setup.exe",
+  "sha256": "fb4909e42ea376dd017316d80c1c18f82822d62a0cacbbc5a61bc152c88b7407",
+  "notes": "Fixed saves from game patch 1.17 failing to load with an 'Incompatible Save File Format' error\nBosses sharing a name (e.g. the two Night's Cavalry in Liurnia) now show their own status, so area counters reach 24/24 again\nThe F8 in-game boss list now respects 'Hide Defeated Bosses'\nSave loading errors now show the real reason instead of a generic message",
   "force": false,
-  "published_at": "2026-06-15T22:11:00Z"
+  "published_at": "2026-11-23T18:30:00Z"
 }
