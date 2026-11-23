@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt, QTimer, QMetaObject, Q_ARG, Signal, QObject
 from .ui.widgets.location_section import LocationSectionWidget
 from .ui.dialogs.boss_stats_dialog import BossStatsDialog
 from .ui.dialogs.location_dialog import LocationDialog
-from .config.app_config import LOCATION_PROGRESSION_ORDER, GAME_PHASE_HEADINGS
+from .config.app_config import LOCATION_PROGRESSION_ORDER, GAME_PHASE_HEADINGS, ISSUES_URL
 
 class AppLogic:
     def __init__(self, app):
@@ -84,8 +84,10 @@ class AppLogic:
             self.app.save_file_success_icon.setVisible(True)
             QTimer.singleShot(3000, lambda: self.app.save_file_success_icon.setVisible(False))
         else:
-            # Keep the old path display if loading failed
-            pass
+            # The character list was already cleared, so the old save is no
+            # longer usable either; send the user back to picking a file.
+            self.app.save_file_path_label.setText("Please select a save file...")
+            self.app.update_onboarding_state("select_file")
 
     def _load_characters_for_save_file(self, save_file_path):
         """Loads character data from the save file and populates the combobox.
@@ -96,30 +98,20 @@ class AppLogic:
         characters, err = self.app.rust_cli_handler.list_characters(save_file_path)
         
         if err:
-            # Check if this is a wrong file type error
-            if "ZSTD" in err or "DCX" in err or "SaveParserError" in err or "BND4" in err or "Buckets" in err:
-                QMessageBox.warning(
-                    self.app, 
-                    "Incompatible Save File Format", 
-                    "This save file appears to be from an older or incompatible version of Elden Ring.\n\n"
-                    "Common causes:\n"
-                    "• Old pirated/cracked game version saves\n"
-                    "• Outdated save file format\n"
-                    "• Wrong Steam ID folder\n\n"
-                    "Solutions:\n"
-                    "1. Try the OTHER numbered folder in %APPDATA%\\EldenRing\\\n"
-                    "   (Different folders = different game versions)\n\n"
-                    "2. If you have multiple folders, use the one where other save editors work\n\n"
-                    "3. For old saves: Use 'Elden Ring Save Manager' from Nexus Mods to\n"
-                    "   convert your save to the current format first\n\n"
-                    "Supported formats: ER0000.sl2 (Vanilla) or ER0000.co2 (Seamless Coop)"
-                )
-            else:
-                QMessageBox.warning(self.app, "Error", f"Failed to read characters:\n{err}")
+            # Show the reader's actual error: guessing a cause from substrings
+            # blamed every parse failure on pirated saves (issue #11).
+            self._show_save_load_problem(
+                "Save File Could Not Be Loaded",
+                f"Loading characters from the save file failed:\n\n{err}"
+            )
             self.app.character_slot_combobox.setEnabled(False)
             return False
-            
+
         if not characters:
+            self._show_save_load_problem(
+                "No Characters Found",
+                f"No characters were found in this save file:\n{save_file_path}"
+            )
             self.app.character_slot_combobox.setEnabled(False)
             return False
 
@@ -133,6 +125,16 @@ class AppLogic:
         # The user must explicitly choose a character
         self.app.character_slot_combobox.setCurrentIndex(0)
         return True
+
+    def _show_save_load_problem(self, title, message):
+        box = QMessageBox(QMessageBox.Icon.Warning, title,
+            f"{message}\n\n"
+            "Expected files: ER0000.sl2 (Vanilla) or ER0000.co2 (Seamless Coop).\n"
+            f"If this looks wrong, please report it with this message at:\n{ISSUES_URL}",
+            QMessageBox.StandardButton.Ok, self.app)
+        # Selectable so users can copy the error into a bug report
+        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        box.exec()
 
     def handle_character_selection_change(self, index):
         """Handles the event when a new character is selected."""
@@ -274,6 +276,7 @@ class AppLogic:
         
         for section_widget in self.app.location_widgets.values():
             section_widget.apply_status_filter(is_checked)
+        self.app.overlay_manager.refresh_boss_list()
 
     def on_search_text_changed(self, text):
         """Filters the displayed bosses based on the search text."""

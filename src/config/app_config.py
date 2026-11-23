@@ -1,7 +1,7 @@
 # src/app_config.py
 
 # Verze aplikace
-APP_VERSION = "1.0.8"
+APP_VERSION = "1.0.9"
 
 # URL k manifestu s nejnovější verzí "https://raw.githubusercontent.com/RysanekDavid/The-Tarnished-Chronicle/main/update_test/latest.json"
 MANIFEST_URL = "https://raw.githubusercontent.com/RysanekDavid/The-Tarnished-Chronicle/main/update_test/latest.json"
@@ -10,6 +10,7 @@ MANIFEST_URL = "https://raw.githubusercontent.com/RysanekDavid/The-Tarnished-Chr
 # Asset Management for large image files
 IMAGE_ASSETS_URL = "https://github.com/RysanekDavid/ER_checklist_assets/releases/download/v1.0.0/Bosses_locations.zip"
 APP_DATA_DIR = "TheTarnishedChronicle"
+ISSUES_URL = "https://github.com/RysanekDavid/The-Tarnished-Chronicle/issues"
 
 # Default overlay styles
 DEFAULT_OVERLAY_BG_COLOR_STR = "rgba(100, 100, 100, 220)"

@@ -144,7 +144,7 @@ class OverlayManager:
             
             # 4. Až TEĎ, s již připraveným a nastaveným textem, okno zobrazíme.
             self._last_boss_list_key = None  # Force a rebuild of the boss list
-            self._refresh_boss_list()
+            self.refresh_boss_list()
             self.overlay_window.show_overlay(self._load_overlay_position())
 
             # Hotkeys live only while the overlay is visible, so F8/F9
@@ -161,7 +161,7 @@ class OverlayManager:
         self._mode = "full" if self._mode == "mini" else "mini"
         self.settings.setValue("overlay/mode", self._mode)
         self._last_boss_list_key = None
-        self._refresh_boss_list()
+        self.refresh_boss_list()
         self.overlay_window.set_mode(self._mode)
 
     def toggle_click_through(self):
@@ -177,7 +177,7 @@ class OverlayManager:
         # Pokud je overlay viditelný, okamžitě překreslíme text.
         if self.overlay_window.isVisible():
             self._render_text()
-            self._refresh_boss_list()
+            self.refresh_boss_list()
 
     def force_ui_update(self):
         """Vynutí překreslení textu na základě posledních známých dat a aktuálního nastavení."""
@@ -185,7 +185,7 @@ class OverlayManager:
         if self.app.save_monitor_logic.current_slot_index != -1:
             self._render_text()
             
-    def _refresh_boss_list(self):
+    def refresh_boss_list(self):
         """Rebuilds the full-mode boss list, but only when the underlying
         data actually changed — update_text() fires every second for the
         live timer and rebuilding rich text that often would be wasteful."""
@@ -193,30 +193,41 @@ class OverlayManager:
             return
 
         data = self.app.boss_data_manager.get_boss_data_by_location()
-        key = tuple(
+        hide_defeated = self.app.hide_defeated_checkbox.isChecked()
+        key = (hide_defeated, tuple(
             (location, tuple(
                 (boss.get("name"), bool(boss.get("is_defeated")))
                 for boss in bosses if isinstance(boss, dict)
             ))
             for location, bosses in data.items() if isinstance(bosses, list)
-        )
+        ))
         if key == self._last_boss_list_key:
             return
         self._last_boss_list_key = key
-        self.overlay_window.set_boss_list_html(self._build_boss_list_html(data))
+        self.overlay_window.set_boss_list_html(
+            self._build_boss_list_html(data, hide_defeated)
+        )
 
-    def _build_boss_list_html(self, data: dict) -> str:
+    @staticmethod
+    def _build_boss_list_html(data: dict, hide_defeated: bool) -> str:
         rows = []
+        has_bosses = False
         for location, bosses in data.items():
             if not isinstance(bosses, list) or not bosses:
                 continue
             valid = [b for b in bosses if isinstance(b, dict)]
+            has_bosses = has_bosses or bool(valid)
             defeated = sum(1 for b in valid if b.get("is_defeated"))
+            # Mirrors the main window's "Hide Defeated Bosses" filter; a
+            # finished location is dropped entirely to save overlay space.
+            shown = [b for b in valid if not (hide_defeated and b.get("is_defeated"))]
+            if not shown:
+                continue
             rows.append(
                 f"<div style='margin-top:8px;'><span style='color:#88C0D0;'>"
                 f"{escape(str(location))} ({defeated}/{len(valid)})</span></div>"
             )
-            for boss in valid:
+            for boss in shown:
                 name = escape(str(boss.get("name", "Unknown")))
                 if boss.get("is_defeated"):
                     rows.append(f"<div style='color:#A3BE8C;'>✓ <s>{name}</s></div>")
@@ -224,7 +235,7 @@ class OverlayManager:
                     rows.append(f"<div style='color:#D8DEE9;'>○ {name}</div>")
 
         if not rows:
-            return "<i>Select a character...</i>"
+            return "<i>All bosses defeated!</i>" if has_bosses else "<i>Select a character...</i>"
         return (
             "<div style='font-size:10pt; font-weight:normal;'>"
             + "".join(rows)
