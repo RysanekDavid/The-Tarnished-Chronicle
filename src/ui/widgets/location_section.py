@@ -84,11 +84,12 @@ class LocationSectionWidget(QFrame):
         self.boss_table.setRowCount(len(self.bosses_data))
         for row, boss_info in enumerate(self.bosses_data):
             boss_name_item = QTableWidgetItem(f" {boss_info.get('name', 'N/A')}")
-            boss_name_item.setData(Qt.ItemDataRole.UserRole, boss_info)
             self.boss_table.setItem(row, 0, boss_name_item)
 
             status_icon_label = QLabel()
             status_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_name = "check.svg" if boss_info.get("is_defeated", False) else "x.svg"
+            status_icon_label.setPixmap(QIcon(get_resource_path(f"assets/icons/{icon_name}")).pixmap(QSize(16, 16)))
             self.boss_table.setCellWidget(row, 1, status_icon_label)
 
             timestamp_seconds = boss_info.get('timestamp')
@@ -120,36 +121,6 @@ class LocationSectionWidget(QFrame):
             location_label.mousePressEvent = lambda event, b=boss_info: self._on_location_button_clicked(b)
             self.boss_table.setCellWidget(row, 4, location_label)
 
-        self.update_boss_info(self.bosses_data)
-
-    def update_boss_info(self, new_bosses_data):
-        self.bosses_data = new_bosses_data
-        defeated_count = 0
-
-        for row in range(self.boss_table.rowCount()):
-            boss_name_item = self.boss_table.item(row, 0)
-            original_boss_info = boss_name_item.data(Qt.ItemDataRole.UserRole)
-            
-            new_boss_info = next((b for b in new_bosses_data if b.get('name') == original_boss_info.get('name')), None)
-            
-            if new_boss_info:
-                # Keep the stored boss data current, otherwise apply_status_filter
-                # works with stale defeat statuses after a monitoring update
-                boss_name_item.setData(Qt.ItemDataRole.UserRole, new_boss_info)
-                is_defeated = new_boss_info.get("is_defeated", False)
-                status_icon_label = self.boss_table.cellWidget(row, 1)
-                if status_icon_label:
-                    icon_path = get_resource_path("assets/icons/check.svg") if is_defeated else get_resource_path("assets/icons/x.svg")
-                    status_icon_label.setPixmap(QIcon(icon_path).pixmap(QSize(16, 16)))
-                
-                timestamp_seconds = new_boss_info.get('timestamp')
-                timestamp_str = format_seconds_to_hms(timestamp_seconds) if timestamp_seconds is not None else ""
-                self.boss_table.item(row, 2).setText(timestamp_str)
-
-                if is_defeated:
-                    defeated_count += 1
-        
-        self._update_header_text()
         self._update_table_height()
 
     def _update_header_text(self):
@@ -167,9 +138,10 @@ class LocationSectionWidget(QFrame):
             self.boss_table.setFixedHeight(0)
 
     def apply_status_filter(self, hide_defeated: bool):
-        for row in range(self.boss_table.rowCount()):
-            boss_name_item = self.boss_table.item(row, 0)
-            boss_info = boss_name_item.data(Qt.ItemDataRole.UserRole)
+        # Rows map to bosses_data by index: names are not unique within a
+        # location (two Night's Cavalry in Liurnia), so any name-based lookup
+        # shows one boss's status on both rows (issue #13).
+        for row, boss_info in enumerate(self.bosses_data):
             is_defeated = boss_info.get("is_defeated", False)
             self.boss_table.setRowHidden(row, hide_defeated and is_defeated)
         self._update_table_height()
