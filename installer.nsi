@@ -6,7 +6,8 @@
 
 !define APP_NAME "ER Boss Checklist"
 !define COMPANY_NAME "TheTarnishedChronicle"
-!define APP_VERSION "1.0.6"
+; Keep in sync with APP_VERSION in src/config/app_config.py on every release
+!define APP_VERSION "1.0.9"
 !define EXE_NAME "ER_Boss_Checklist.exe" ; Static EXE name
 !define ICON_FILE "assets\icons\app_logo.ico"
 !define OUTPUT_FILENAME "ER_Boss_Checklist_Setup.exe"

@@ -9,6 +9,7 @@ MANIFEST_URL = "http://localhost:8000/test_manifest.json"
 # Asset Management for large image files
 IMAGE_ASSETS_URL = "https://github.com/RysanekDavid/ER_checklist_assets/releases/download/v1.0.0/Bosses_locations.zip"
 APP_DATA_DIR = "TheTarnishedChronicle"
+ISSUES_URL = "https://github.com/RysanekDavid/The-Tarnished-Chronicle/issues"
 
 # Default overlay styles
 DEFAULT_OVERLAY_BG_COLOR_STR = "rgba(100, 100, 100, 220)"
